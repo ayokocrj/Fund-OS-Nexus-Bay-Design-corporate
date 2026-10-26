@@ -1,0 +1,3 @@
+SYNTHETIC REPORT
+Fixture only. No real fund data.
+Target close is conditional on two confirmations.

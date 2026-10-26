@@ -1,0 +1,14 @@
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+process.chdir(path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
+const source = await readFile("attached_assets/Pasted-Fund-OS-v3-Agent-Edition-planning-and-specification-for_1793055309099.txt", "utf8");
+const constitutionStart = source.indexOf("Prompt 0, constitution and agent core\n");
+const constitutionEnd = source.indexOf("\nPrompt 1, senses and Capture", constitutionStart);
+const modelStart = source.indexOf("13. Data model, normalised (Prisma-ready names)\n");
+const modelEnd = source.indexOf("\n14. Behaviour", modelStart);
+if ([constitutionStart, constitutionEnd, modelStart, modelEnd].some(x => x < 0)) throw new Error("CONTRACT_SECTION_MISSING");
+await mkdir("docs", { recursive: true });
+await writeFile("docs/constitution.md", source.slice(constitutionStart, constitutionEnd) + "\n");
+await writeFile("docs/data-model.md", source.slice(modelStart, modelEnd) + "\n");
+console.log("Materialized Prompt 0 and section 13 verbatim. No skill prompts executed.");

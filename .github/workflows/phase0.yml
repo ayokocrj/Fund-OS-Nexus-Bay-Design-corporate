@@ -1,0 +1,49 @@
+name: Phase 0 contract
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fund
+          POSTGRES_PASSWORD: ci-ephemeral-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: fund_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://fund:ci-ephemeral-${{ github.run_id }}-${{ github.run_attempt }}@localhost:5432/fund_test
+      SESSION_SECRET: ci-demo-session-${{ github.run_id }}-${{ github.run_attempt }}-synthetic
+      PORT: 24294
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/fund-os-core db:generate
+      - name: Initialize isolated ephemeral CI database (never production)
+        run: pnpm --filter @workspace/fund-os-core exec prisma migrate deploy --schema ../../prisma/schema.prisma
+      - run: pnpm phase0:seed
+      - run: pnpm --filter @workspace/fund-os-core exec tsx ../../scripts/make-fixtures.ts
+      - run: pnpm --filter @workspace/fund-os-core typecheck
+      - run: pnpm --filter @workspace/fund-os-core build
+      - run: pnpm --filter @workspace/fund-os-core exec playwright install --with-deps chromium
+      - name: Start app
+        run: |
+          pnpm --filter @workspace/fund-os-core serve > /tmp/fund-os.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:24294/api/core/session && break; sleep 2; done
+      - run: npm test
+      - run: pnpm --filter @workspace/fund-os-core exec tsx ../../scripts/export.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase0-evidence
+          path: generated-artifacts/

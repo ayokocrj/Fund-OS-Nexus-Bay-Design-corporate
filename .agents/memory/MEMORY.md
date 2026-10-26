@@ -1,1 +1,2 @@
 - [Fund OS direction](fund-os-direction.md) — Nexus Bay identity, corporate restraint, and PRD trust constraints.
+- [Phase 0 contract](phase0-contract.md) — No prototype or skill screens; deliver schema, mock trace and full tests, then stop before Prompt 1.

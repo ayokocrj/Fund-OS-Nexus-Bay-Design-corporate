@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Fund OS · Agent Core"
+description = "Phase 0 agent core. Synthetic demo only."
+version = "1.0.0"
+id = "artifacts/fund-os-core"
+router = "path"
+
+[[services]]
+name = "web"
+paths = ["/", "/api/core"]
+localPort = 24294
+
+[services.development]
+run = "pnpm --filter @workspace/fund-os-core run dev"
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/fund-os-core", "run", "build"]
+
+[services.production.run]
+args = ["pnpm", "--filter", "@workspace/fund-os-core", "run", "serve"]
+
+[services.production.health.startup]
+path = "/"
+
+[services.env]
+PORT = "24294"
+BASE_PATH = "/"

@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "values": [
+    12,
+    18,
+    24
+  ],
+  "tolerance": 0,
+  "page": 1,
+  "source": "generated-known-values"
+}

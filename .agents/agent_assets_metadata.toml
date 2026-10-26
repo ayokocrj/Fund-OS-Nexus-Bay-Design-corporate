@@ -1,0 +1,30 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "0C7IKFOdnrWbv5xv8qGot"
+uri = "file://generated-artifacts/phase0/test-output.txt"
+type = "text"
+title = "Phase 0 — Full test output"
+description = "Unabridged output: secret scan, test TypeScript check, 55 core tests and 3 Playwright E2E tests. Final result: PASSED."
+logical_id = "b7a84274-a560-4f0f-ba04-d9b079fc433d"
+content_hash = "sha256:54a1b60bdbc5a09d3c9d95facf6c8db8899650e08178ca1825189ebb069b5a35"
+size = 8532
+mtime_ms = 1793057554858
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:4512ca08-2839-4a5a-b943-bbd4e73b07e7/b7a84274-a560-4f0f-ba04-d9b079fc433d/725863b5-1a8d-49fa-9629-68219256c574"
+storage_version_token = "1793057661729244"
+content_type = "text/plain"
+
+[[outputs]]
+id = "lAN-nokJUTTgaFx23L1aS"
+uri = "file://generated-artifacts/phase0/episode-trace.json"
+type = "unspecified"
+title = "Phase 0 — Demonstration episode trace"
+description = "Persisted seven-step mock episode for Meridian Ridge Partners (synthetic), with source evidence, passed critic, zero model cost, replay verification and ledger verification."
+logical_id = "e77e32a8-929c-4761-9568-c91bb516301d"
+content_hash = "sha256:7fe164a02a13e85ea1055b7f7ccc2cf2d202c1aa14ce1cd3004497879db06a5b"
+size = 7873
+mtime_ms = 1793057565986
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:4512ca08-2839-4a5a-b943-bbd4e73b07e7/e77e32a8-929c-4761-9568-c91bb516301d/05b1fd06-7638-451c-9ec7-cd3571ff62e3"
+storage_version_token = "1793057662214922"
+content_type = "application/octet-stream"

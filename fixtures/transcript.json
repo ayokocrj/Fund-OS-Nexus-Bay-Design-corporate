@@ -1,0 +1,14 @@
+{
+  "synthetic": true,
+  "speakers": [
+    "Synthetic speaker A"
+  ],
+  "spans": [
+    {
+      "start": 0,
+      "end": 4,
+      "text": "The target close remains conditional."
+    }
+  ],
+  "consent_fixture": true
+}

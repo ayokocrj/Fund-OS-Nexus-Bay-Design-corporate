@@ -11,6 +11,99 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /core/session:
+    get:
+      operationId: coreSession
+      responses:
+        "200":
+          description: Demo session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoreSession" }
+    post:
+      operationId: selectDemoIdentity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DemoIdentityInput" }
+      responses:
+        "200":
+          description: Signed demo session selected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoreSession" }
+  /core/episodes:
+    get:
+      operationId: listCoreEpisodes
+      responses:
+        "200":
+          description: Authorized episode traces
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CoreEpisode" }
+    post:
+      operationId: runCoreEpisode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EpisodeInput" }
+      responses:
+        "201":
+          description: Completed mock-provider episode
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoreEpisode" }
+  /core/proposals:
+    get:
+      operationId: listCoreProposals
+      responses:
+        "200":
+          description: Authorized proposals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CoreProposal" }
+  /core/proposals/{id}/review:
+    post:
+      operationId: reviewCoreProposal
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProposalReviewInput" }
+      responses:
+        "200":
+          description: Persisted version-checked review decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoreProposal" }
+  /core/sources/{id}:
+    get:
+      operationId: getCoreSource
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Authorized source with recorded access
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoreSource" }
+  /core/ledger:
+    get:
+      operationId: verifyCoreLedger
+      responses:
+        "200":
+          description: Ledger verification
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoreLedger" }
   /healthz:
     get:
       operationId: healthCheck
@@ -26,6 +119,95 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    DemoIdentityInput:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string }
+    CoreIdentity:
+      type: object
+      required: [userId, name, role, firmId, firmName]
+      properties:
+        userId: { type: string }
+        name: { type: string }
+        role: { type: string }
+        firmId: { type: string }
+        firmName: { type: string }
+    CoreSession:
+      type: object
+      required: [identity, identities, mode]
+      properties:
+        identity: { $ref: "#/components/schemas/CoreIdentity" }
+        identities:
+          type: array
+          items: { $ref: "#/components/schemas/CoreIdentity" }
+        mode: { type: string }
+    EpisodeInput:
+      type: object
+      required: [orgId]
+      properties:
+        orgId: { type: string }
+    CoreStep:
+      type: object
+      required: [step_id, seq, kind, tool_name, output_ref, run_id]
+      properties:
+        step_id: { type: string }
+        seq: { type: integer }
+        kind: { type: string }
+        tool_name: { type: ["string", "null"] }
+        output_ref: { type: ["string", "null"] }
+        run_id: { type: ["string", "null"] }
+    CoreEpisode:
+      type: object
+      required: [episode_id, goal, status, skill, cost, critic_verdict, started_at, steps, plan_json]
+      properties:
+        episode_id: { type: string }
+        goal: { type: string }
+        status: { type: string }
+        skill: { type: string }
+        cost: { type: string }
+        critic_verdict: { type: ["string", "null"] }
+        started_at: { type: string }
+        plan_json: { type: object, additionalProperties: true }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/CoreStep" }
+    CoreProposal:
+      type: object
+      required: [proposal_id, episode_id, type, state, version, payload_json, reviewer_id]
+      properties:
+        proposal_id: { type: string }
+        episode_id: { type: string }
+        type: { type: string }
+        state: { type: string }
+        version: { type: integer }
+        payload_json: { type: object, additionalProperties: true }
+        reviewer_id: { type: ["string", "null"] }
+    ProposalReviewInput:
+      type: object
+      required: [action, version]
+      properties:
+        action: { type: string, enum: [accepted, edited, rejected, confirmed] }
+        version: { type: integer, minimum: 0 }
+        text: { type: string, minLength: 1, maxLength: 4000 }
+    CoreSource:
+      type: object
+      required: [obs_id, doc_id, modality, text, locator_json]
+      properties:
+        obs_id: { type: string }
+        doc_id: { type: ["string", "null"] }
+        modality: { type: string }
+        text: { type: string }
+        locator_json: { type: object, additionalProperties: true }
+    CoreLedger:
+      type: object
+      required: [valid, count, failures]
+      properties:
+        valid: { type: boolean }
+        count: { type: integer }
+        failures:
+          type: array
+          items: { type: string }
     HealthStatus:
       type: object
       properties:

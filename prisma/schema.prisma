@@ -1,0 +1,457 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum Profile {
+  vc
+  fof
+}
+enum Mode {
+  demo
+  tenant
+}
+enum Role {
+  partner
+  analyst
+  ops
+  ir
+  compliance
+  builder
+  auditor
+}
+enum EpisodeStatus {
+  planned
+  awaiting_approval
+  running
+  stopped
+  done
+  failed
+}
+enum StepKind {
+  perceive
+  resolve
+  plan
+  tool
+  critic
+  present
+  learn
+}
+enum ProposalState {
+  proposed
+  accepted
+  edited
+  rejected
+  confirmed
+  applied
+  failed
+}
+enum ProposalType {
+  entity
+  fact
+  score
+  flag
+  draft
+  crm_update
+  task
+  document_request
+}
+enum Modality {
+  text
+  table
+  chart
+  audio
+  video
+  web
+}
+model Firm {
+  firm_id String @id
+  name String
+  profile Profile
+  mode Mode @default(demo)
+  language String @default("en")
+  settings Json
+}
+model User {
+  user_id String @id
+  firm_id String
+  name String
+  email String
+  role Role
+  sso_subject String?
+  @@unique([firm_id, email])
+  @@unique([firm_id, user_id])
+}
+model Organisation {
+  org_id String @id
+  firm_id String
+  kind String
+  legal_name String
+  country String?
+  website String?
+  registry_id String?
+  sector_tags String[]
+  state String @default("proposed")
+  @@unique([firm_id, registry_id])
+  @@unique([firm_id, org_id])
+}
+model Person {
+  person_id String @id
+  firm_id String
+  name String
+  email String?
+  org_id String?
+  role_label String?
+  state String @default("proposed")
+  @@unique([firm_id, email])
+}
+model Conversation {
+  conv_id String @id
+  firm_id String
+  channel String
+  occurred_at DateTime
+  raw_ref String
+  raw_hash String @unique
+  source_uri String?
+  language String
+  participants ConversationParticipant[]
+}
+model ConversationParticipant {
+  conv_id String
+  person_id String
+  conversation Conversation @relation(fields: [conv_id], references: [conv_id], onDelete: Restrict)
+  @@id([conv_id, person_id])
+}
+model Consent {
+  consent_id String @id @default(cuid())
+  conv_id String
+  person_id String
+  type String
+  recorded_by String
+  recorded_at DateTime
+  method String
+  @@unique([conv_id, person_id, type])
+}
+model Observation {
+  obs_id String @id @default(cuid())
+  doc_id String?
+  conv_id String?
+  modality Modality
+  locator_json Json
+  text String
+  value_json Json?
+  confidence Float
+  extractor_version String
+  run_id String
+}
+model Document {
+  doc_id String @id
+  firm_id String
+  owner_type String
+  owner_id String
+  type String
+  version Int
+  hash String
+  storage_ref String
+  retention_class String
+  legal_hold Boolean @default(false)
+  provenance Json
+  language String
+  @@unique([firm_id, hash, version])
+}
+model Episode {
+  episode_id String @id @default(cuid())
+  firm_id String
+  acting_user_id String?
+  service_identity String?
+  surface String
+  trigger String
+  skill String
+  goal String
+  plan_json Json
+  status EpisodeStatus @default(planned)
+  cost Decimal @default(0) @db.Decimal(18, 8)
+  critic_verdict String?
+  started_at DateTime @default(now())
+  ended_at DateTime?
+  steps Step[]
+  proposals Proposal[]
+  @@index([firm_id, started_at])
+}
+model Step {
+  step_id String @id @default(cuid())
+  episode_id String
+  seq Int
+  kind StepKind
+  tool_name String?
+  tool_version String?
+  input_ref String?
+  output_ref String?
+  run_id String?
+  episode Episode @relation(fields: [episode_id], references: [episode_id], onDelete: Restrict)
+  @@unique([episode_id, seq])
+}
+model Proposal {
+  proposal_id String @id @default(cuid())
+  firm_id String
+  episode_id String
+  type ProposalType
+  target_type String
+  target_id String
+  payload_json Json
+  state ProposalState @default(proposed)
+  reviewer_id String?
+  reviewed_at DateTime?
+  edit_diff Json?
+  version Int @default(0)
+  episode Episode @relation(fields: [episode_id], references: [episode_id], onDelete: Restrict)
+  @@index([firm_id, state])
+}
+model OrganisationFact {
+  fact_id String @id @default(cuid())
+  org_id String
+  field String
+  value Json
+  obs_id String
+  source_type String
+  confidence Float
+  valid_from DateTime
+  valid_to DateTime?
+  run_id String
+  reviewer_id String
+}
+model PersonFact {
+  pfact_id String @id @default(cuid())
+  person_id String
+  field String
+  value Json
+  obs_id String
+  confidence Float
+  run_id String
+  valid_from DateTime @default(now())
+  valid_to DateTime?
+  reviewer_id String
+}
+model Item {
+  item_id String @id
+  firm_id String
+  kind String
+  org_id String
+  source_channel String
+  received_at DateTime
+  stage String
+  status String
+  owner_id String
+  version Int @default(0)
+}
+model CriteriaSet {
+  criteria_id String @id
+  firm_id String
+  target String
+  version Int
+  basis_ref String
+  effective_from DateTime
+  signed_by String
+  criteria Criterion[]
+  @@unique([firm_id, target, version])
+}
+model Criterion {
+  criterion_id String @id
+  criteria_id String
+  name String
+  evidence_definition String
+  weight Decimal @db.Decimal(6, 2)
+  criteria_set CriteriaSet @relation(fields: [criteria_id], references: [criteria_id], onDelete: Restrict)
+}
+model Score {
+  score_id String @id @default(cuid())
+  item_id String
+  criteria_id String
+  value Decimal @db.Decimal(8, 3)
+  run_id String
+  @@unique([item_id, criteria_id])
+}
+model ScoreReason {
+  score_id String
+  criterion_id String
+  met String
+  evidence_obs_id String?
+  note String
+  @@id([score_id, criterion_id])
+}
+model Decision {
+  decision_id String @id
+  item_id String
+  user_id String
+  outcome String
+  reason String
+  reason_audio_ref String?
+  decided_at DateTime
+  score_id String?
+}
+model RevisitTrigger {
+  trigger_id String @id
+  item_id String
+  condition_text String
+  signal_source String
+  created_by String
+}
+model Holding {
+  holding_id String @id
+  firm_id String
+  org_id String
+  level String
+  invested_at DateTime
+  instrument String
+  schema_version String
+}
+model MetricObservation {
+  metric_obs_id String @id @default(cuid())
+  holding_id String
+  period String
+  metric_code String
+  value Decimal @db.Decimal(24, 8)
+  currency String?
+  source_type String
+  obs_id String
+  confidence Float
+  indicative Boolean
+  formula_version String?
+  run_id String
+  validated_by String?
+  @@unique([holding_id, period, metric_code, source_type])
+}
+model Flag {
+  flag_id String @id @default(cuid())
+  metric_obs_id String
+  rule_version String
+  severity String
+  playbook_ref String
+  raised_at DateTime
+  resolved_at DateTime?
+  resolved_by String?
+  note String?
+}
+model Claim {
+  claim_id String @id @default(cuid())
+  item_id String
+  doc_id String
+  page Int?
+  statement String
+  figure String?
+  status String
+  evidence_obs_id String?
+  run_id String
+}
+model Task {
+  task_id String @id @default(cuid())
+  firm_id String
+  owner_id String
+  kind String
+  ref_type String
+  ref_id String
+  due_at DateTime?
+  state String
+}
+model Brief {
+  brief_id String @id @default(cuid())
+  firm_id String
+  kind String
+  period String
+  doc_id String
+  audio_ref String?
+  generated_by_run String
+}
+model ChartSpec {
+  chart_id String @id @default(cuid())
+  firm_id String
+  owner_type String
+  owner_id String
+  spec_json Json
+  data_query String
+  generated_at DateTime
+}
+model Run {
+  run_id String @id @default(cuid())
+  firm_id String
+  skill String
+  tool_name String
+  started_at DateTime @default(now())
+  inputs_hash String
+  provider String
+  model_version String
+  prompt_version String
+  temperature Float
+  seed Int
+  output_ref String
+  reason String
+  cost Decimal @db.Decimal(18, 8)
+  latency_ms Int
+  status String
+  invariant_results Json
+  reviewer_id String?
+  prev_hash String
+  hash String @unique
+  seq Int @unique @default(autoincrement())
+}
+model Invariant {
+  invariant_id String @id
+  name String
+  scope String
+  check_definition String
+  since_version String
+}
+model AutonomyPolicy {
+  firm_id String
+  skill String
+  level Int @default(0)
+  since DateTime @default(now())
+  change_request_id String?
+  set_by String
+  reason String?
+  @@id([firm_id, skill])
+}
+model ChangeRequest {
+  cr_id String @id @default(cuid())
+  firm_id String
+  what String
+  why String
+  requested_by String
+  ab_evaluation_id String?
+  signed_by String?
+  applied_at DateTime?
+}
+model GoldSetItem {
+  gs_id String @id
+  firm_id String
+  skill String
+  modality String
+  payload_ref String
+  label_json Json
+  source String
+  added_at DateTime
+  month_version String
+}
+model Evaluation {
+  eval_id String @id @default(cuid())
+  firm_id String
+  skill String?
+  sense String?
+  version_a String
+  version_b String?
+  metrics_json Json
+  suite String
+  computed_at DateTime
+  run_id String
+}
+model AccessLog {
+  log_id String @id @default(cuid())
+  user_id String?
+  service_identity String?
+  entity String
+  entity_id String
+  action String
+  at DateTime @default(now())
+}
