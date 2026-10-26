@@ -7,6 +7,8 @@ The user asks for a corporate, uncluttered design with Apple-level product-desig
 
 The user wants the Fund OS interface in English and asked for higher visual quality than the initial prototype.
 
+The user also asked to structure Fund OS around an AI agent with multimodal features, rather than simply adding chat to the existing dashboard.
+
 **Why:** Fidelity to the existing brand and the supplied PRD is an explicit requirement, not a generic finance-app aesthetic.
 
 **How to apply:** Retain official Nexus Bay assets and its visual identity when extending the prototype. Do not replace the logo with a newly invented mark.
