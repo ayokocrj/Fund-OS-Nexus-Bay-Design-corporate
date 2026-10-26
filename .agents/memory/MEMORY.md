@@ -1,0 +1,1 @@
+- [Fund OS direction](fund-os-direction.md) — Nexus Bay identity, corporate restraint, and PRD trust constraints.
