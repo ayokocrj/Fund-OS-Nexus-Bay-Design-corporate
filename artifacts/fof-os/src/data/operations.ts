@@ -27,7 +27,7 @@ export const REG_CALENDAR: [string, number, number][] = [
 
 export interface Deal { id: string; co: string; round: string; via: string; lead: string; alloc: number; score: number; gaps: string[]; by: string }
 export const DEALS: Deal[] = [
-  { id: 'd1', co: 'Nimbus Ledger', round: 'Series B, $40m', via: 'Bluefern Ventures', lead: 'Growth fund, named', alloc: 1.5, score: 82, gaps: ['Information rights at our ticket size'], by: '20 Nov' },
+  { id: 'd1', co: 'Nimbus Ledger', round: 'Series B, $40m', via: 'Bluefern Ventures', lead: 'Growth fund, named', alloc: 1.5, score: 82, gaps: ['Information rights at our ticket size', 'GRR 88.3% (below 90% bar); $240k/mo capitalized R&D; 10% post-money option pool'], by: '20 Nov' },
   { id: 'd2', co: 'Quillio Health', round: 'Series B extension, $12m', via: 'Lantern Hill Partners', lead: 'Existing investor', alloc: 1.0, score: 68, gaps: ['Runway 9.7 months: bridge or priced round?', 'Lead terms not shared'], by: '30 Nov' },
   { id: 'd3', co: 'Ferrous AI', round: 'Seed extension, $4m', via: 'Granite Fork Ventures', lead: 'Granite Fork', alloc: 0.5, score: 54, gaps: ['Below our $1m direct floor', 'Paying usage: 4 customers'], by: '15 Nov' },
   { id: 'd4', co: 'Orbital Freight', round: 'Insider bridge, $2m', via: 'Northwind Seed', lead: 'Insiders', alloc: 0.3, score: 41, gaps: ['Runway 6.2 months; plan to profitability not shared', 'Our policy: no bridges without a lead'], by: '10 Nov' },

@@ -99,7 +99,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const initial = useMemo(welcomeThread, []);
   const [threads, setThreads] = useState<Thread[]>(() => [initial, ...RECENT_SEED.map((r) => ({ ...r, msgs: [] }))]);
   const [activeThread, setActive] = useState(initial.id);
-  const [voice, setVoice] = useState(false);
+  const [voice, setVoice] = useState(true);
   const [source, setSource] = useState<Source | null>(null);
   const activeRef = useRef(activeThread);
   activeRef.current = activeThread;

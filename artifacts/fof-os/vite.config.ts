@@ -59,6 +59,11 @@ export default defineConfig({
     },
     dedupe: ['react', 'react-dom'],
   },
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
   root: path.resolve(import.meta.dirname),
   build: {
     outDir: path.resolve(import.meta.dirname, 'dist/public'),
@@ -69,6 +74,20 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
     allowedHosts: true,
+    proxy: {
+      '/read': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/ask': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/growth-models': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/api-key': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/healthz': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/fof-os/read': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/fof-os/ask': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/fof-os/growth-models': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/fof-os/api-key': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/fof-os/healthz': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/api/read': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+      '/api/ask': `http://127.0.0.1:${process.env.CORE_PORT ?? '24294'}`,
+    },
     fs: {
       strict: true,
     },

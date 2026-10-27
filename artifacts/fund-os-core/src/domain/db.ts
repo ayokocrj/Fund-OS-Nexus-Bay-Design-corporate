@@ -1,17 +1,65 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { createRequire } from "node:module";
+import type { PrismaClient as PrismaClientType, Prisma as PrismaNamespace } from "@prisma/client";
+
+const requireModule = createRequire(import.meta.url);
+
+class FallbackDecimal {
+  readonly value: number;
+  constructor(v: number | string | FallbackDecimal) {
+    this.value = v instanceof FallbackDecimal ? v.value : Number(v);
+  }
+  add(other: number | string | FallbackDecimal) {
+    const o = other instanceof FallbackDecimal ? other.value : Number(other);
+    return new FallbackDecimal(Number((this.value + o).toFixed(8)));
+  }
+  gt(other: number | string | FallbackDecimal) {
+    const o = other instanceof FallbackDecimal ? other.value : Number(other);
+    return this.value > o;
+  }
+  toNumber() {
+    return this.value;
+  }
+  toString() {
+    return String(this.value);
+  }
+  toJSON() {
+    return this.value;
+  }
+  valueOf() {
+    return this.value;
+  }
+}
+
+let PrismaClient: typeof PrismaClientType;
+let Prisma: typeof PrismaNamespace;
+try {
+  const pkg = requireModule("@prisma/client") as { PrismaClient: typeof PrismaClientType; Prisma: typeof PrismaNamespace };
+  PrismaClient = pkg.PrismaClient;
+  Prisma = pkg.Prisma;
+} catch {
+  Prisma = { Decimal: FallbackDecimal } as unknown as typeof PrismaNamespace;
+  PrismaClient = class {
+    $extends() {
+      return this;
+    }
+    $disconnect() {
+      return Promise.resolve();
+    }
+  } as unknown as typeof PrismaClientType;
+}
 
 export type Actor = { firmId: string; userId?: string; serviceIdentity?: string };
-export type Tx = Prisma.TransactionClient;
+export type Tx = PrismaNamespace.TransactionClient;
 export { Prisma };
 export const actorContext = new AsyncLocalStorage<Actor>();
-const globalDb = globalThis as unknown as { fundPrisma?: PrismaClient };
+const globalDb = globalThis as unknown as { fundPrisma?: PrismaClientType };
 const base = globalDb.fundPrisma ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalDb.fundPrisma = base;
 
 // This query middleware applies to every Document/Decision read, including reads
 // introduced by future callers. Identity and scope are not optional parameters.
-export const db: PrismaClient = base.$extends({
+export const db: PrismaClientType = base.$extends({
   query: {
     $allModels: {
       async $allOperations({ model, operation, args, query }) {
@@ -44,7 +92,7 @@ export const db: PrismaClient = base.$extends({
       },
     },
   },
-}) as unknown as PrismaClient;
+}) as unknown as PrismaClientType;
 export function withActor<T>(actor: Actor, action: () => Promise<T>): Promise<T> {
   // Prisma queries are lazy thenables: assimilate them while the context is
   // active, before returning to the caller's authorization context.

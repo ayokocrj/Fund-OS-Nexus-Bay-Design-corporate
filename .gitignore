@@ -57,3 +57,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Ignore large local video files and personal course repo folder (14 .xlsx models are tracked in artifacts/fund-os-core/data/growth-equity-models)
+*.mp4
+Growth Equty Guide - Copie/
+.env
+.env.*
+
+

@@ -1,14 +1,71 @@
 import { db, withActor, type Actor, type Tx, Prisma } from "./db";
 import { hash, canonical } from "./hash";
-import { invariantGuard } from "./guard";
 
 export type EventInput = {
   skill: string; tool: string; input: unknown; output: unknown;
-  reason: string; status?: string; provider?: string; cost?: number;
+  reason: string; status?: string; provider?: string; modelVersion?: string;
+  cost?: number; latencyMs?: number;
   reviewerId?: string; invariantResults?: Prisma.InputJsonValue;
   episodeId?: string;
 };
+export type LedgerRunEntry = {
+  run_id: string; seq: number; firm_id: string; skill: string; tool_name: string;
+  started_at: Date; inputs_hash: string; provider: string; model_version: string;
+  cost: number; latency_ms: number; status: string; prev_hash: string; hash: string;
+  output_ref: string; reason: string;
+};
 const genesis = "0".repeat(64);
+const memoryRuns: LedgerRunEntry[] = [];
+function pushMemoryRun(entry: LedgerRunEntry) {
+  memoryRuns.push(entry);
+  return entry;
+}
+export function getMemoryRuns(firmId?: string): LedgerRunEntry[] {
+  return firmId ? memoryRuns.filter(r => r.firm_id === firmId) : [...memoryRuns];
+}
+export function clearMemoryRuns() {
+  memoryRuns.length = 0;
+}
+export function appendMemoryRun(actor: Actor, event: EventInput): LedgerRunEntry {
+  const previous = memoryRuns.at(-1);
+  const seq = (previous?.seq ?? 0) + 1;
+  const started_at = new Date();
+  const costNum = Number((event.cost ?? 0).toFixed(8));
+  const latency_ms = Math.max(0, Math.round(event.latencyMs ?? 0));
+  const model_version = event.modelVersion ?? (event.tool.startsWith("gateway.") ? "mock-v2" : "core-v2");
+  const provider = event.provider ?? "deterministic";
+  const body = {
+    firm_id: actor.firmId, skill: event.skill, tool_name: event.tool,
+    started_at, inputs_hash: hash(event.input),
+    provider, model_version,
+    prompt_version: "core/v2", temperature: 0, seed: 0,
+    output_ref: canonical(event.output), reason: event.reason,
+    cost: costNum, latency_ms,
+    status: event.status ?? "ok", invariant_results: event.invariantResults ?? { guard: "passed" },
+    reviewer_id: event.reviewerId ?? null, prev_hash: previous?.hash ?? genesis,
+    hash_version: 2, episode_id: event.episodeId ?? null,
+    input_ref: JSON.parse(canonical(event.input ?? {})),
+  };
+  const entryHash = hash(body);
+  return pushMemoryRun({
+    run_id: `run-${seq}-${entryHash.slice(0, 12)}`,
+    seq,
+    firm_id: actor.firmId,
+    skill: event.skill,
+    tool_name: event.tool,
+    started_at,
+    inputs_hash: body.inputs_hash,
+    provider,
+    model_version,
+    cost: costNum,
+    latency_ms,
+    status: body.status,
+    prev_hash: body.prev_hash,
+    hash: entryHash,
+    output_ref: body.output_ref,
+    reason: event.reason,
+  });
+}
 function hashBody(row: Record<string, unknown>) {
   const { run_id: _id, hash: _hash, seq: _seq, ...body } = row;
   if (body.hash_version === 1) {
@@ -24,20 +81,46 @@ export async function appendRun(tx: Tx, actor: Actor, event: EventInput) {
   const body = {
     firm_id: actor.firmId, skill: event.skill, tool_name: event.tool,
     started_at: new Date(), inputs_hash: hash(event.input),
-    provider: event.provider ?? "deterministic", model_version: event.tool.startsWith("gateway.") ? "mock-v2" : "core-v2",
+    provider: event.provider ?? "deterministic", model_version: event.modelVersion ?? (event.tool.startsWith("gateway.") ? "mock-v2" : "core-v2"),
     prompt_version: "core/v2", temperature: 0, seed: 0,
     output_ref: canonical(event.output), reason: event.reason,
-    cost: new Prisma.Decimal(event.cost ?? 0), latency_ms: 0,
+    cost: new Prisma.Decimal(event.cost ?? 0), latency_ms: Math.max(0, Math.round(event.latencyMs ?? 0)),
     status: event.status ?? "ok", invariant_results: event.invariantResults ?? { guard: "passed" },
     reviewer_id: event.reviewerId ?? null, prev_hash: previous?.hash ?? genesis,
     hash_version: 2, episode_id: event.episodeId ?? null,
     input_ref: JSON.parse(canonical(event.input ?? {})) as Prisma.InputJsonValue,
   };
-  return tx.run.create({ data: { ...body, hash: hash(body) } });
+  const created = await tx.run.create({ data: { ...body, hash: hash(body) } });
+  pushMemoryRun({
+    run_id: created.run_id, seq: created.seq, firm_id: created.firm_id,
+    skill: created.skill, tool_name: created.tool_name, started_at: created.started_at,
+    inputs_hash: created.inputs_hash, provider: created.provider, model_version: created.model_version,
+    cost: Number(created.cost), latency_ms: created.latency_ms, status: created.status,
+    prev_hash: created.prev_hash, hash: created.hash, output_ref: created.output_ref, reason: created.reason,
+  });
+  return created;
 }
 export async function recordRun(actor: Actor, event: EventInput) {
+  const { invariantGuard } = await import("./guard");
   await invariantGuard(actor, event.tool.startsWith("read") ? "read" : "propose");
   return db.$transaction(tx => appendRun(tx, actor, event));
+}
+export async function recordLedgerRun(actor: Actor, event: EventInput): Promise<LedgerRunEntry> {
+  if (process.env.DATABASE_URL) {
+    try {
+      const created = await db.$transaction(tx => appendRun(tx, actor, event));
+      return {
+        run_id: created.run_id, seq: created.seq, firm_id: created.firm_id,
+        skill: created.skill, tool_name: created.tool_name, started_at: created.started_at,
+        inputs_hash: created.inputs_hash, provider: created.provider, model_version: created.model_version,
+        cost: Number(created.cost), latency_ms: created.latency_ms, status: created.status,
+        prev_hash: created.prev_hash, hash: created.hash, output_ref: created.output_ref, reason: created.reason,
+      };
+    } catch {
+      return appendMemoryRun(actor, event);
+    }
+  }
+  return appendMemoryRun(actor, event);
 }
 export async function verifyChain(options: { full?: boolean } = {}) {
   return db.$transaction(async tx => {
@@ -66,10 +149,12 @@ export async function verifyChain(options: { full?: boolean } = {}) {
   }, { timeout: 30000 });
 }
 export async function explain(actor: Actor, id: string) {
+  const { invariantGuard } = await import("./guard");
   await invariantGuard(actor, "read");
   return db.run.findFirstOrThrow({ where: { run_id: id, firm_id: actor.firmId } });
 }
 async function snapshotReplay(actor: Actor, episodeId: string) {
+  const { invariantGuard } = await import("./guard");
   await invariantGuard(actor, "read");
   const episode = await db.episode.findFirstOrThrow({ where: { episode_id: episodeId, firm_id: actor.firmId }, include: { steps: { orderBy: { seq: "asc" } } } });
   const runs = await db.run.findMany({ where: { run_id: { in: episode.steps.flatMap(s => s.run_id ? [s.run_id] : []) } } });

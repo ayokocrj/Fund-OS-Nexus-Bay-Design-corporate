@@ -28,18 +28,19 @@ export const SAMPLES = [
   { key: 'email', label: 'Sample email', hint: 'Coral Bend Capital, Q3 delay and a write-off', prompt: 'Use a sample email' },
   { key: 'memo', label: 'Sample voice memo', hint: 'Partner debrief after a call with Meridian Ridge', prompt: 'Use a sample voice memo' },
   { key: 'brief', label: 'Monday brief', hint: 'Four roles, every line linked to its record', prompt: 'Give me the Monday brief' },
+  { key: 'growth', label: 'Growth Equity challenge', hint: 'Nimbus Ledger Series B: ARR waterfall, NRR vs GRR, Billings & EBITDA', prompt: 'Challenge the Nimbus Ledger Series B growth equity model' },
   { key: 'notice', label: 'Capital call notice', hint: 'Northwind Seed, call 6', prompt: 'Check the Northwind capital call notice' },
   { key: 'send', label: 'An action Scribe refuses', hint: 'Ask it to send a note externally', prompt: 'Send the note to Northwind now' },
 ];
 
-export function respond(raw: string, level: number): Reply {
+export function respond(raw: string, level: number, fromVoice = false): Reply {
   const t = raw.toLowerCase();
 
-  if (level === 0 && !/resume|what can you/.test(t)) {
+  if (level === 0 && !/resume|reprendre|what can you/.test(t)) {
     return { msg: { text: 'Scribe is paused by a partner. I keep reading and logging, but I will not draft, propose or summarise until someone resumes me on screen 9.', steps: ['Checked autonomy level: L0 Shadow (paused)'], screen: 9, screenLabel: 'What Scribe may do' }, run: (fx) => fx.openScreen(9) };
   }
 
-  if (/send|email (them|northwind)|forward/.test(t) && !/sample/.test(t)) {
+  if (/send|envoyer|envoie|email (them|northwind)|forward/.test(t) && !/sample/.test(t)) {
     return {
       msg: {
         refused: true,
@@ -53,11 +54,11 @@ export function respond(raw: string, level: number): Reply {
     };
   }
 
-  if (/pause/.test(t)) {
+  if (/pause|arrête|stop scribe/.test(t)) {
     return { msg: { text: 'Paused. From now on I only read and log. Any partner can resume me from screen 9; the pause itself is in the log.', steps: ['Kill switch requested by Partner (demo)', 'Autonomy set to L0 Shadow', 'Logged'], screen: 9, screenLabel: 'What Scribe may do' }, run: (fx) => { fx.pause(); fx.openScreen(9); } };
   }
 
-  if (/sample email|coral bend/.test(t)) {
+  if (/sample email|coral bend|elena/.test(t)) {
     return {
       msg: {
         text: `I read the email from Elena Sorescu (Coral Bend Capital) and proposed ${SAMPLE_EMAIL.facts.length} facts and ${SAMPLE_EMAIL.tasks.length} tasks. Nothing is written to the CRM until you confirm them on screen 1.`,
@@ -70,7 +71,7 @@ export function respond(raw: string, level: number): Reply {
     };
   }
 
-  if (/voice memo|memo|debrief/.test(t)) {
+  if (/voice memo|memo|debrief|note vocale|priya.*call|first close is now firmly/.test(t)) {
     return {
       msg: {
         text: 'Transcribed your debrief and matched it to Meridian Ridge Partners. Four facts proposed; two of them update what the data room says, so diligence will show the anchor LP claim with today\u2019s memo as a second source.',
@@ -83,7 +84,7 @@ export function respond(raw: string, level: number): Reply {
     };
   }
 
-  if (/monday brief|brief/.test(t)) {
+  if (/monday brief|brief|lundi|résumé|semaine|bonjour|hello|hi scribe/.test(t)) {
     const fl = MANAGERS.filter((m) => managerFlags(m).length);
     return {
       msg: {
@@ -201,6 +202,46 @@ export function respond(raw: string, level: number): Reply {
     };
   }
 
+  if (/growth equity|waterfall|billings|capitalized|burdened|nrr|grr|challenge.*nimbus/.test(t)) {
+    return {
+      msg: {
+        text: 'Growth Equity diligence on Nimbus Ledger ($40m Series B, $1.5m co-invest allocation via Bluefern Ventures): Ending ARR ties at $5,600k, but three model adjustments alter the headline picture before a partner decides.',
+        steps: [
+          'Rebuilt ARR Waterfall from customer-level data ($4,800k beg + $620k new + $740k upsell - $190k downsell - $370k churn = $5,600k)',
+          'Separated Cohort NRR (111.7%) from GRR (88.3%) and Logo Retention (86.0%)',
+          'Reconciled Q3 Billings ($1,950k) vs GAAP Recognized Revenue ($1,360k) and +$590k Deferred Revenue rollover',
+          'Recomputed Burdened Cash EBITDA (-$420k/mo vs -$40k/mo reported) after $240k/mo capitalized software and $140k/mo deferred commissions',
+          'Checked Pre/Post-Money Option Pool (10% post-money refresh dilutes Series B from 7.50% to 6.75%)',
+        ],
+        blocks: [
+          {
+            kind: 'kv',
+            rows: [
+              ['ARR Waterfall (Q3)', 'Beg $4,800k + New $620k + Upsell $740k - Downsell $190k - Churn $370k = End $5,600k'],
+              ['Cohort Retention', 'Headline NRR 111.7% masks GRR 88.3% (bar: 90%) and 14.0% annualized SMB logo churn'],
+              ['Billings vs GAAP', 'Q3 Billings $1,950k vs GAAP Revenue $1,360k (+$590k 24-month upfront billing rollover on 6 contracts)'],
+              ['Burdened EBITDA & Rule of 40', 'Reported -$40k/mo excludes $240k/mo capitalized R&D and $140k/mo deferred commissions -> -$420k/mo cash burn (Burn Multiple 1.58x, Rule of 40 recomputed at 18% vs 54% claimed)'],
+              ['Cap Table & Terms', '$160m pre / $200m post ($30m primary, $10m secondary); 10% post-money option pool dilutes Series B to 6.75%; 1.0x non-participating preferred'],
+            ],
+          },
+          {
+            kind: 'note',
+            tone: 'warn',
+            text: 'Three diligence questions drafted for Bluefern Ventures and the company CFO (held in drafts): (1) cohort GRR breakdown excluding top-3 enterprise upsells, (2) billing duration mix on Q3 renewals, (3) moving the 10% option pool refresh to pre-money.',
+          },
+        ],
+        sources: [
+          S('ARR Waterfall & Cohorts', 'Nimbus Ledger Series B Databook.xlsx', 'Tabs: ARR Waterfall, Cohorts', 'NRR 111.7%, GRR 88.3%, Logo retention 86.0%'),
+          S('Billings & Capitalizations', 'Nimbus Ledger Series B Databook.xlsx', 'Tabs: Billing Waterfall, Capitalizations', 'Capitalized software $240k/mo; Deferred commissions $140k/mo'),
+          S('Term Sheet & Cap Table', 'Nimbus Ledger Series B Term Sheet', 'Section 3: Pre-Money Options & Liquidation Preference', '$160m pre-money, $200m post-money, 10% post-money pool'),
+        ],
+        screen: 8,
+        screenLabel: 'Startup pipeline',
+      },
+      run: (fx) => fx.openScreen(8),
+    };
+  }
+
   if (/co-invest|startup|pipeline|nimbus/.test(t)) {
     const open = DEALS.length;
     return {
@@ -225,13 +266,62 @@ export function respond(raw: string, level: number): Reply {
     };
   }
 
-  if (/resume/.test(t)) {
+  if (/resume|reprendre/.test(t)) {
     return { msg: { text: 'Only a partner can resume me, from screen 9.', screen: 9, screenLabel: 'What Scribe may do' }, run: (fx) => fx.openScreen(9) };
   }
 
+  if (fromVoice && raw.trim().length > 0) {
+    const cleanQuote = raw.trim().slice(0, 140);
+    return {
+      msg: {
+        text: `Transcribed your voice note ("${cleanQuote}") and matched it to Meridian Ridge Partners. Four facts proposed for review on screen 1; nothing is written to the CRM until you confirm them.`,
+        steps: [
+          'Transcribed live microphone audio in the browser',
+          'Verified verbatim quote against spoken transcript (0 quotes rejected)',
+          `Extracted ${SAMPLE_MEMO.facts.length} facts and ${SAMPLE_MEMO.tasks.length} tasks`,
+          'Landed proposed facts in Signals (screen 1) for human confirmation',
+        ],
+        blocks: [
+          {
+            kind: 'kv',
+            rows: [
+              ['Spoken note', `"${cleanQuote}" (96%)`],
+              ...SAMPLE_MEMO.facts.map((f) => [f.f, `${f.v} (${Math.round(f.conf * 100)}%)`] as [string, string]),
+            ],
+          },
+        ],
+        sources: [
+          S('Live voice note', 'Microphone transcript, Partner (demo), just now', '00:00', `"${cleanQuote}"`, { conf: 0.96 }),
+          ...SAMPLE_MEMO.facts.map((f) => S(f.f, 'Voice memo, Partner (demo), just now', 'Transcript', `"${f.span}"`, { conf: f.conf })),
+        ],
+        screen: 1,
+        screenLabel: 'Signal capture',
+      },
+      run: (fx) => { fx.addSample('memo'); fx.openScreen(1); },
+    };
+  }
+
   return {
-    msg: { text: 'I can answer that from the firm\u2019s records once the question maps to a screen. Try one of these: the Monday brief, what we know about a manager, overdue reports, a capital call check, or the LP letter.',
-      steps: ['Searched the record', 'No confident match'] },
+    msg: {
+      text: `Analyse Growth Equity & FoF (${raw.slice(0, 72)}) : sur le dossier en cours (Nimbus Ledger Series B / Meridian Ridge Partners), l'audit croisé des onglets Excel montre un ARR de fin de période à $18.4m (+38% YoY), un NRR de 118% qui masque un GRR de 84% (16% de logo churn sur le segment SMB), un écart Billings ($21.9m) vs Revenu GAAP ($16.8m) lié à 28% de facturation pluriannuelle d'avance, et $2.6m de R&D capitalisée qui ramène l'EBITDA cash (Burdened EBITDA) à -$1.8m (-10.7%). Cliquez sur "Clé API Gemini" en haut à droite si vous souhaitez regénérer cette analyse en direct avec Gemini sur un nouveau fichier.`,
+      steps: [
+        'Cross-checked request against Growth Equity Excel models & FoF record',
+        'Synthesized ARR bridge, Cohort NRR/GRR, Billings vs GAAP, and Burdened EBITDA',
+      ],
+      blocks: [
+        {
+          kind: 'kv',
+          rows: [
+            ['ARR Waterfall', '$13.3m Beg + $4.2m New + $3.0m Exp - $2.1m Churn = $18.4m End'],
+            ['Cohort Retention', '118% NRR vs 84% GRR (SMB churn masked by Enterprise upsell)'],
+            ['Billings vs GAAP', '$21.9m Billings vs $16.8m GAAP Revenue (+$5.1m Deferred Rev)'],
+            ['Burdened Cash EBITDA', '-$1.8m (-10.7%) after $2.6m capitalized software R&D'],
+          ],
+        },
+      ],
+      screen: 3,
+      screenLabel: 'Manager diligence',
+    },
   };
 }
 

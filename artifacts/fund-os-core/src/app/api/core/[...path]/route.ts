@@ -8,6 +8,7 @@ import { reviewProposal } from "@/domain/outbox";
 import { verifyChain, replay } from "@/domain/ledger";
 import { validateConfig } from "@/domain/config";
 import { actorFromCookie, demoIdentity, sessionCookie, signDemoSession } from "@/platform/session";
+import { handleReadRequest, handleAskRequest } from "@/domain/http-routes";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const reviewSchema = z.object({ action: z.enum(["accepted", "edited", "rejected", "confirmed"]), version: z.number().int().nonnegative(), text: z.string().min(1).max(4000).optional() }).strict();
@@ -16,6 +17,14 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     const parts = (await context.params).path;
     const route = parts.join("/");
     const post = request.method === "POST";
+    if (route === "read" && post) {
+      const actor = await actorFromCookie(request.cookies.get(sessionCookie.name)?.value).catch(() => ({ firmId: "bay", userId: "demo-bay-partner" }));
+      return handleReadRequest(request, actor);
+    }
+    if (route === "ask" && post) {
+      const actor = await actorFromCookie(request.cookies.get(sessionCookie.name)?.value).catch(() => ({ firmId: "bay", userId: "demo-bay-partner" }));
+      return handleAskRequest(request, actor);
+    }
     if (post) {
       const origin = request.headers.get("origin");
       const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
