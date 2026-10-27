@@ -5,12 +5,15 @@ export const settingsSchema = z.object({
   providers: z.array(z.object({ name: z.string(), live: z.boolean(), modalities: z.array(z.enum(["complete", "see", "transcribe", "speak", "embed"])) }).strict()),
   adapters: z.array(z.object({ name: z.string(), live: z.boolean(), enabled: z.boolean(), readOnly: z.boolean() }).strict()),
   flags: z.record(z.string(), z.boolean()),
+  permissions: z.object({
+    outboxConfirmRoles: z.array(z.enum(["partner", "analyst", "ops"])).min(1),
+  }).strict().default({ outboxConfirmRoles: ["partner", "analyst", "ops"] }),
 }).strict();
 export type Settings = z.infer<typeof settingsSchema>;
 export const demoSettings: Settings = {
   budgets: { episode: 10, monthly: 100 },
   providers: [{ name: "deterministic", live: false, modalities: ["complete", "see", "transcribe", "speak", "embed"] }],
-  adapters: [], flags: {},
+  adapters: [], flags: {}, permissions: { outboxConfirmRoles: ["partner", "analyst", "ops"] },
 };
 export function validateConfig(mode: string, input: unknown): Settings {
   if (!["demo", "tenant"].includes(mode)) throw new Error("INVALID_MODE");

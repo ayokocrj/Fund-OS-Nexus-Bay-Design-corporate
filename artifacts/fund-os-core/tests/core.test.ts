@@ -6,7 +6,7 @@ import { db, disconnect, withActor } from "../src/domain/db";
 import { registry, validateTool, sideEffectClasses, invokeTool } from "../src/agent/registry";
 import { demoSettings, validateConfig } from "../src/domain/config";
 import { gateway, modalities, mockResult } from "../src/domain/gateway";
-import { critic } from "../src/agent/critic";
+import { critic, isPassing } from "../src/agent/critic";
 import { invariantGuard } from "../src/domain/guard";
 import { changeAutonomy } from "../src/agent/autonomy";
 import { checkBudget } from "../src/agent/budget";
@@ -18,11 +18,27 @@ import { detectInstructions, encloseUntrusted } from "../src/agent/untrusted";
 import { makeFixtures, fixturesRoot } from "../src/platform/fixtures";
 import { FixtureObjectStore } from "../src/platform/object-store";
 import { signDemoSession, verifyDemoSession } from "../src/platform/session";
+import { runNightlyVerification } from "../src/platform/scheduling";
+import { plannerInput } from "../src/agent/planner";
 import type { Episode } from "@prisma/client";
 const actor = { firmId: "bay", userId: "demo-bay-builder" };
 const partner = { firmId: "bay", userId: "demo-bay-partner" };
 const auditor = { firmId: "bay", userId: "demo-bay-auditor" };
 let episode: Episode;
+async function freshRecord() {
+  const id = `review-test-${randomUUID()}`;
+  const text = `Synthetic fixture ${id}: the close is conditional on human confirmation.`;
+  const object = await new FixtureObjectStore().putImmutable(Buffer.from(text));
+  await db.$transaction(async tx => {
+    await tx.organisation.create({ data: { org_id: id, firm_id: "bay", legal_name: id, kind: "fund" } });
+    const run = await appendRun(tx, actor, { skill: "core", tool: "test.fixture", input: { id }, output: { synthetic: true }, reason: "Isolated review regression fixture" });
+    await tx.document.create({ data: { doc_id: id, firm_id: "bay", owner_type: "Organisation", owner_id: id, type: "memo", version: 1, hash: object.hash, storage_ref: object.ref, retention_class: "synthetic-demo", provenance: { synthetic: true }, language: "en" } });
+    await tx.observation.create({ data: { obs_id: id, doc_id: id, modality: "text", locator_json: { page: 1 }, text, confidence: 1, extractor_version: "fixture-v2", run_id: run.run_id } });
+    await tx.organisationFact.create({ data: { org_id: id, field: "accepted_note", value: text, obs_id: id, source_type: "human_fixture", confidence: 1, valid_from: new Date(), run_id: run.run_id, reviewer_id: partner.userId } });
+  });
+  const episode = await runEpisode(actor, id);
+  return { id, text, answer: { text, citations: [id] }, episode };
+}
 beforeAll(async () => { episode = await runEpisode(actor, "bay-org-001"); });
 afterAll(disconnect);
 
@@ -153,24 +169,28 @@ describe("integrity | PostgreSQL enforces the contract", () => {
     await tx.criterion.create({ data: { criterion_id: id, criteria_id: id, name: "invalid", evidence_definition: "test", weight: 90 } });
   })).rejects.toThrow());
   it("optimistic reviews reject a stale version", async () => {
-    const proposal = await withActor(actor, () => propose(actor, episode.episode_id, "draft", "bay-org-001", { text: "The target first close is September 2025, conditional on two LP confirmations.", citations: ["bay-obs-1"] }));
-    await reviewProposal(actor, proposal.proposal_id, "edited", 0, "Reviewer wording");
-    await expect(reviewProposal(actor, proposal.proposal_id, "accepted", 0)).rejects.toThrow("VERSION_CONFLICT");
+    const f = await freshRecord();
+    const proposal = await withActor(actor, () => propose(actor, f.episode.episode_id, "draft", f.id, f.answer));
+    await reviewProposal(partner, proposal.proposal_id, "edited", 0, "Reviewer wording");
+    await expect(reviewProposal(partner, proposal.proposal_id, "accepted", 0)).rejects.toThrow("VERSION_CONFLICT");
+    await expect(reviewProposal(partner, proposal.proposal_id, "accepted", 1)).rejects.toThrow("TERMINAL_REVIEW_STATE");
     expect((await db.proposal.findUniqueOrThrow({ where: { proposal_id: proposal.proposal_id } })).state).toBe("edited");
   });
   it("confirmed outbox state records human signoff without applying", async () => {
-    const proposal = await withActor(actor, () => propose(actor, episode.episode_id, "crm_update", "bay-org-001", { text: "The target first close is September 2025, conditional on two LP confirmations.", citations: ["bay-obs-1"] }));
+    const f = await freshRecord();
+    const proposal = await withActor(actor, () => propose(actor, f.episode.episode_id, "crm_update", f.id, f.answer));
     const result = await reviewProposal(partner, proposal.proposal_id, "confirmed", 0);
     expect(result.state).toBe("confirmed"); expect(result.reviewer_id).toBe(partner.userId);
   });
 });
 
 describe("replay | episode, steps, evidence and chained runs", () => {
-  it("demonstration stores all seven step kinds with a passing critic", async () => {
+  it("Ask stops at present, creates no proposal and records a structured critic and non-zero usage", async () => {
     const steps = await db.step.findMany({ where: { episode_id: episode.episode_id }, orderBy: { seq: "asc" } });
-    expect(steps.map(x => x.kind)).toEqual(["perceive", "resolve", "plan", "tool", "critic", "present", "learn"]);
-    expect(episode.status).toBe("done"); expect(episode.critic_verdict).toBe("passed");
-    expect(Number(episode.cost)).toBe(0);
+    expect(steps.map(x => x.kind)).toEqual(["perceive", "resolve", "plan", "tool", "critic", "present"]);
+    expect(episode.status).toBe("done"); expect(isPassing(episode.critic_verdict)).toBe(true);
+    expect(Number(episode.cost)).toBeGreaterThan(0);
+    expect(await db.proposal.count({ where: { episode_id: episode.episode_id } })).toBe(0);
   });
   it("replaying three episodes is stable and does not modify history", async () => {
     const episodes = [episode, await runEpisode(actor, "bay-org-001"), await runEpisode(actor, "bay-org-001")];
@@ -178,7 +198,7 @@ describe("replay | episode, steps, evidence and chained runs", () => {
     for (const current of episodes) {
       const a = await replay(actor, current.episode_id);
       const b = await replay(actor, current.episode_id);
-      expect(a.verified).toBe(true); expect(a.outputHash).toBe(b.outputHash);
+      expect(a.verified).toBe(true); expect(a).toEqual(b);
     }
     expect(await db.run.count()).toBe(before);
     expect((await verifyChain()).valid).toBe(true);
@@ -214,20 +234,20 @@ describe("injection | thirty planted instructions, zero executed", () => {
     const result = await runEpisode(actor, id);
     const planStep = await db.step.findFirstOrThrow({ where: { episode_id: result.episode_id, kind: "plan" } });
     expect(JSON.parse(planStep.output_ref!).toolPolicy).toBe("read-only");
-    expect(await db.proposal.count({ where: { episode_id: result.episode_id, type: "task" } })).toBe(1);
-    expect(await db.proposal.count({ where: { episode_id: result.episode_id, type: { in: ["draft", "crm_update"] } } })).toBe(0);
+    expect(await db.task.count({ where: { ref_id: result.episode_id, ref_type: "SourceFlag" } })).toBe(1);
+    expect(await db.proposal.count({ where: { episode_id: result.episode_id } })).toBe(0);
   });
 });
 
 describe("planted_error | critic refuses unsupported or prohibited output", () => {
   for (const text of ["The first close is December 2029.", "The manager returned 999%.", "You should invest in this fund.", "I sent the memo.", "The valuation is 500."]) it(`blocks planted claim: ${text}`, async () => {
-    expect((await withActor(actor, () => critic(actor, { text, citations: ["bay-obs-1"] }))).passed).toBe(false);
+    expect((await withActor(actor, () => critic(actor, { text, citations: ["bay-obs-1"] }))).overall).toBe("block");
   });
   it("a valid citation does not make an unsupported sentence true", async () => {
-    expect((await withActor(actor, () => critic(actor, { text: "September is guaranteed.", citations: ["bay-obs-1"] }))).passed).toBe(false);
+    expect((await withActor(actor, () => critic(actor, { text: "September is guaranteed.", citations: ["bay-obs-1"] }))).checks.confidence_language.status).toBe("fail");
   });
-  it("an unresolved citation is blocked", async () => expect((await withActor(actor, () => critic(actor, { text: "Something happened.", citations: ["missing"] }))).passed).toBe(false));
-  it("an explicit missing-record answer is permitted", async () => expect((await critic(actor, { text: "Not in the record.", citations: [] })).passed).toBe(true));
+  it("an unresolved citation is blocked", async () => expect((await withActor(actor, () => critic(actor, { text: "Something happened.", citations: ["missing"] }))).overall).toBe("block"));
+  it("an explicit missing-record answer is permitted with notes", async () => expect((await withActor(actor, () => critic(actor, { text: "Not in the record.", citations: [] }))).overall).toBe("pass_with_notes"));
 });
 
 describe("perception | known fixtures validate plumbing, not real accuracy", () => {
@@ -244,5 +264,147 @@ describe("perception | known fixtures validate plumbing, not real accuracy", () 
     const b = await store.putImmutable(Buffer.from("known synthetic content"));
     expect(a).toEqual(b); expect(Buffer.from(await store.read(a.ref)).toString()).toBe("known synthetic content");
     await expect(store.read("fixture:../../secret")).rejects.toThrow("INVALID_OBJECT_REFERENCE");
+  });
+});
+
+describe("Phase 0 review | read-only Ask, proposal idempotency and server roles", () => {
+  it("repeated Ask and direct read-tool calls produce zero proposals or proposal links", async () => {
+    const before = await db.proposal.count();
+    await withActor(actor, () => invokeTool(actor, "answer_from_record", { orgId: "bay-org-001" }, true));
+    for (let i = 0; i < 3; i++) {
+      const result = await runEpisode(actor, "bay-org-001");
+      expect(result.steps.at(-1)?.kind).toBe("present");
+      expect(result.proposalLinks).toHaveLength(0);
+    }
+    expect(await db.proposal.count()).toBe(before);
+  });
+  for (const state of ["proposed", "accepted", "edited", "confirmed"] as const) it(`identical ${state} proposal is reused and linked to a new Episode`, async () => {
+    const f = await freshRecord();
+    const type = state === "confirmed" ? "crm_update" : "draft";
+    const first = await withActor(actor, () => propose(actor, f.episode.episode_id, type, f.id, f.answer));
+    if (state !== "proposed") await reviewProposal(partner, first.proposal_id, state, 0, state === "edited" ? "Explicit reviewer edit" : undefined);
+    const next = await runEpisode(actor, f.id);
+    const reused = await withActor(actor, () => propose(actor, next.episode_id, type, f.id, f.answer));
+    expect(reused.proposal_id).toBe(first.proposal_id);
+    expect(await db.proposal.count({ where: { target_id: f.id } })).toBe(1);
+    expect(await db.episodeProposal.count({ where: { proposal_id: first.proposal_id } })).toBe(2);
+  });
+  it("concurrent identical proposals are serialized to one canonical row", async () => {
+    const f = await freshRecord();
+    const results = await Promise.all(Array.from({ length: 4 }, () => withActor(actor, () => propose(actor, f.episode.episode_id, "draft", f.id, f.answer))));
+    expect(new Set(results.map(row => row.proposal_id)).size).toBe(1);
+  });
+  it("guard property: no builder/auditor action sequence can mutate Review or Outbox", async () => {
+    const f = await freshRecord();
+    const proposal = await withActor(actor, () => propose(actor, f.episode.episode_id, "crm_update", f.id, f.answer));
+    await fc.assert(fc.asyncProperty(fc.array(fc.tuple(fc.constantFrom("builder", "auditor"), fc.constantFrom("accepted", "edited", "rejected", "confirmed")), { minLength: 1, maxLength: 6 }), async commands => {
+      for (const [role, action] of commands) await expect(reviewProposal({ firmId: "bay", userId: `demo-bay-${role}` }, proposal.proposal_id, action, 0, "Attempted edit")).rejects.toThrow(/READ_ONLY/);
+    }), { numRuns: 20 });
+    expect((await db.proposal.findUniqueOrThrow({ where: { proposal_id: proposal.proposal_id } })).version).toBe(0);
+  });
+  for (const role of ["ops", "ir", "compliance", "builder", "auditor"]) it(`${role} cannot accept a fact`, async () => {
+    const f = await freshRecord();
+    const proposal = await withActor(actor, () => propose(actor, f.episode.episode_id, "fact", f.id, f.answer));
+    await expect(reviewProposal({ firmId: "bay", userId: `demo-bay-${role}` }, proposal.proposal_id, "accepted", 0)).rejects.toThrow(/ROLE_FORBIDDEN|READ_ONLY/);
+  });
+  for (const role of ["analyst", "partner"]) it(`${role} can accept a source-backed fact and is recorded as reviewer`, async () => {
+    const f = await freshRecord();
+    const proposal = await withActor(actor, () => propose(actor, f.episode.episode_id, "fact", f.id, f.answer));
+    const human = { firmId: "bay", userId: `demo-bay-${role}` };
+    expect((await reviewProposal(human, proposal.proposal_id, "accepted", 0)).reviewer_id).toBe(human.userId);
+    expect((await db.organisationFact.findFirstOrThrow({ where: { org_id: f.id, valid_to: null } })).reviewer_id).toBe(human.userId);
+  });
+  it("outbox confirmation obeys Firm.settings and cannot grant builder access", async () => {
+    const f = await freshRecord();
+    const proposal = await withActor(actor, () => propose(actor, f.episode.episode_id, "crm_update", f.id, f.answer));
+    const firm = await db.firm.findUniqueOrThrow({ where: { firm_id: "bay" } });
+    const settings = validateConfig("demo", firm.settings);
+    try {
+      await db.firm.update({ where: { firm_id: "bay" }, data: { settings: { ...settings, permissions: { outboxConfirmRoles: ["partner"] } } } });
+      for (const role of ["analyst", "ops", "ir", "compliance", "builder", "auditor"]) await expect(reviewProposal({ firmId: "bay", userId: `demo-bay-${role}` }, proposal.proposal_id, "confirmed", 0)).rejects.toThrow(/FORBIDDEN|READ_ONLY/);
+      expect((await reviewProposal(partner, proposal.proposal_id, "confirmed", 0)).state).toBe("confirmed");
+      expect(() => validateConfig("demo", { ...settings, permissions: { outboxConfirmRoles: ["builder"] } })).toThrow();
+    } finally { await db.firm.update({ where: { firm_id: "bay" }, data: { settings: firm.settings! } }); }
+  });
+  it("database independently refuses a builder confirmation", async () => {
+    const f = await freshRecord();
+    const proposal = await withActor(actor, () => propose(actor, f.episode.episode_id, "crm_update", f.id, f.answer));
+    await expect(db.proposal.update({ where: { proposal_id: proposal.proposal_id }, data: { state: "confirmed", version: 1, reviewer_id: actor.userId, reviewed_at: new Date() } })).rejects.toThrow("REVIEWER_FORBIDDEN");
+  });
+});
+
+describe("Phase 0 review | structured critic, real budget path and true replay", () => {
+  it("database rejects an incomplete critic JSON even if it claims pass", async () => {
+    await expect(db.episode.create({ data: { firm_id: "bay", acting_user_id: actor.userId, surface: "test", trigger: "user", skill: "core", goal: "invalid structured critic", plan_json: {}, status: "done", critic_verdict: { overall: "pass", checks: {} } } })).rejects.toThrow("structured_critic");
+  });
+  it("critic reports all five check statuses and explanatory notes", async () => {
+    const verdict = await withActor(actor, () => critic(actor, { text: "The target first close is September 2025, conditional on two LP confirmations.", citations: ["bay-obs-1"] }));
+    expect(Object.keys(verdict.checks)).toEqual(["citations_resolve", "citation_supports_text", "forbidden_content", "injected_instruction", "confidence_language"]);
+    expect(verdict.overall).toBe("pass");
+    for (const check of Object.values(verdict.checks)) { expect(check.status).toBe("pass"); expect(check.note.length).toBeGreaterThan(10); }
+  });
+  it("all five modalities expose positive synthetic token usage and unit cost", () => {
+    for (const modality of modalities) {
+      const usage = mockResult(modality, { fixture: "budget" }).usage;
+      expect(usage.input_tokens).toBeGreaterThan(0); expect(usage.output_tokens).toBeGreaterThan(0);
+      expect(usage.unit_cost).toBeGreaterThan(0); expect(usage.cost).toBeGreaterThan(0); expect(usage.synthetic).toBe(true);
+    }
+  });
+  it("BudgetGuard: cap reached, Episode stopped, partial draft kept as stopped and user asked", async () => {
+    const f = await freshRecord();
+    const firm = await db.firm.findUniqueOrThrow({ where: { firm_id: "bay" } });
+    const settings = validateConfig("demo", firm.settings);
+    const cap = mockResult("complete", plannerInput("bay", f.id, `What do we know about ${f.id}?`)).usage.cost;
+    try {
+      await db.firm.update({ where: { firm_id: "bay" }, data: { settings: { ...settings, budgets: { ...settings.budgets, episode: cap } } } });
+      const result = await runEpisode(actor, f.id, { intent: "draft" });
+      expect(result.status).toBe("stopped");
+      expect(Number(result.cost)).toBe(cap);
+      const draft = await db.proposal.findFirstOrThrow({ where: { episode_id: result.episode_id, type: "draft" } });
+      expect(draft.state).toBe("stopped"); expect(draft.payload_json).toMatchObject({ text: f.text, status: "stopped" });
+      expect(result.plan_json).toHaveProperty("question");
+      expect(await db.task.count({ where: { ref_id: result.episode_id, kind: "review" } })).toBe(1);
+      expect(await db.run.count({ where: { episode_id: result.episode_id, tool_name: "gateway.complete" } })).toBe(1);
+    } finally { await db.firm.update({ where: { firm_id: "bay" }, data: { settings: firm.settings! } }); }
+  });
+  it("monthly cap refuses gateway usage atomically before a model run is recorded", async () => {
+    const firm = await db.firm.findUniqueOrThrow({ where: { firm_id: "bay" } });
+    const settings = validateConfig("demo", firm.settings);
+    const before = await db.run.count({ where: { tool_name: "gateway.complete" } });
+    try {
+      await db.firm.update({ where: { firm_id: "bay" }, data: { settings: { ...settings, budgets: { ...settings.budgets, monthly: 0 } } } });
+      await expect(gateway(actor, "complete", { fixture: "monthly-cap" })).rejects.toThrow("BUDGET_EXHAUSTED");
+      expect(await db.run.count({ where: { tool_name: "gateway.complete" } })).toBe(before);
+    } finally { await db.firm.update({ where: { firm_id: "bay" }, data: { settings: firm.settings! } }); }
+  });
+  it("snapshot verifies integrity without gateway calls; re-execution reruns mock gateway and compares step hashes", async () => {
+    const result = await runEpisode(actor, "bay-org-001");
+    const before = await db.run.count({ where: { tool_name: "gateway.replay.complete" } });
+    expect((await replay(actor, result.episode_id, "snapshot")).verified).toBe(true);
+    expect(await db.run.count({ where: { tool_name: "gateway.replay.complete" } })).toBe(before);
+    const proposals = await db.proposal.count();
+    const reexecuted = await replay(actor, result.episode_id, "reexecute");
+    expect(reexecuted).toMatchObject({ verified: true, gatewayCalls: 1, sideEffectsReapplied: false, integrity: true });
+    expect(await db.run.count({ where: { tool_name: "gateway.replay.complete" } })).toBe(before + 1);
+    expect(await db.proposal.count()).toBe(proposals);
+  });
+  it("re-execution detects changed inputs instead of merely rehashing saved outputs", async () => {
+    const result = await runEpisode(actor, "bay-org-001");
+    const context = result.context_json as Record<string, unknown>;
+    try {
+      await db.episode.update({ where: { episode_id: result.episode_id }, data: { context_json: { ...context, orgName: "Changed replay input" } } });
+      expect((await replay(actor, result.episode_id, "reexecute")).verified).toBe(false);
+    } finally { await db.episode.update({ where: { episode_id: result.episode_id }, data: { context_json: result.context_json! } }); }
+  });
+  it("verification advances only the unverified tail and nightly job is idempotent", async () => {
+    expect((await verifyChain({ full: true })).valid).toBe(true);
+    expect((await verifyChain()).checked).toBe(0);
+    await db.$transaction(tx => appendRun(tx, actor, { skill: "core", tool: "test.incremental", input: {}, output: {}, reason: "One new tail entry" }));
+    expect(await verifyChain()).toMatchObject({ valid: true, checked: 1, incremental: true });
+    expect((await verifyChain()).checked).toBe(0);
+    const day = `synthetic-${randomUUID()}`;
+    expect((await runNightlyVerification(day)).executed).toBe(true);
+    expect((await runNightlyVerification(day)).executed).toBe(false);
+    expect((await verifyChain()).valid).toBe(true);
   });
 });

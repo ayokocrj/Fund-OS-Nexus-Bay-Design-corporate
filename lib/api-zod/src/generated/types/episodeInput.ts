@@ -5,7 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { EpisodeInputIntent } from './episodeInputIntent';
 
 export interface EpisodeInput {
   orgId: string;
+  intent?: EpisodeInputIntent;
 }

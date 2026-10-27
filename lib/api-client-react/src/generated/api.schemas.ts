@@ -17,14 +17,30 @@ export interface CoreIdentity {
   firmName: string;
 }
 
+export type CoreSessionReviewPermissions = {
+  review: boolean;
+  acceptFacts: boolean;
+  confirmOutbox: boolean;
+};
+
 export interface CoreSession {
   identity: CoreIdentity;
   identities: CoreIdentity[];
   mode: string;
+  review_permissions?: CoreSessionReviewPermissions;
 }
+
+export type EpisodeInputIntent = typeof EpisodeInputIntent[keyof typeof EpisodeInputIntent];
+
+
+export const EpisodeInputIntent = {
+  ask: 'ask',
+  draft: 'draft',
+} as const;
 
 export interface EpisodeInput {
   orgId: string;
+  intent?: EpisodeInputIntent;
 }
 
 export interface CoreStep {
@@ -41,14 +57,49 @@ export interface CoreStep {
 
 export type CoreEpisodePlanJson = { [key: string]: unknown };
 
+export type CriticVerdictOverall = typeof CriticVerdictOverall[keyof typeof CriticVerdictOverall];
+
+
+export const CriticVerdictOverall = {
+  pass: 'pass',
+  pass_with_notes: 'pass_with_notes',
+  block: 'block',
+} as const;
+
+export type CriticCheckStatus = typeof CriticCheckStatus[keyof typeof CriticCheckStatus];
+
+
+export const CriticCheckStatus = {
+  pass: 'pass',
+  fail: 'fail',
+} as const;
+
+export interface CriticCheck {
+  status: CriticCheckStatus;
+  note: string;
+}
+
+export type CriticVerdictChecks = {
+  citations_resolve: CriticCheck;
+  citation_supports_text: CriticCheck;
+  forbidden_content: CriticCheck;
+  injected_instruction: CriticCheck;
+  confidence_language: CriticCheck;
+};
+
+export interface CriticVerdict {
+  overall: CriticVerdictOverall;
+  checks: CriticVerdictChecks;
+}
+
 export interface CoreEpisode {
   episode_id: string;
   goal: string;
   status: string;
   skill: string;
   cost: string;
-  /** @nullable */
-  critic_verdict: string | null;
+  critic_verdict: CriticVerdict | null;
+  intent?: string;
   started_at: string;
   plan_json: CoreEpisodePlanJson;
   steps: CoreStep[];
@@ -65,6 +116,7 @@ export interface CoreProposal {
   payload_json: CoreProposalPayloadJson;
   /** @nullable */
   reviewer_id: string | null;
+  linked_episode_ids?: string[];
 }
 
 export type ProposalReviewInputAction = typeof ProposalReviewInputAction[keyof typeof ProposalReviewInputAction];
@@ -102,7 +154,29 @@ export interface CoreSource {
 export interface CoreLedger {
   valid: boolean;
   count: number;
+  checked?: number;
+  incremental?: boolean;
+  verified_at?: string;
   failures: string[];
+}
+
+export interface CoreReplay {
+  episodeId: string;
+  mode: string;
+  verified: boolean;
+  [key: string]: unknown;
+ }
+
+export type ReplayInputMode = typeof ReplayInputMode[keyof typeof ReplayInputMode];
+
+
+export const ReplayInputMode = {
+  snapshot: 'snapshot',
+  reexecute: 'reexecute',
+} as const;
+
+export interface ReplayInput {
+  mode: ReplayInputMode;
 }
 
 export interface HealthStatus {

@@ -57,6 +57,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CoreEpisode" }
+  /core/episodes/{id}/replay:
+    post:
+      operationId: replayCoreEpisode
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplayInput" }
+      responses:
+        "200":
+          description: Integrity snapshot or mock-gateway re-execution comparisons
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoreReplay" }
   /core/proposals:
     get:
       operationId: listCoreProposals
@@ -142,11 +158,19 @@ components:
           type: array
           items: { $ref: "#/components/schemas/CoreIdentity" }
         mode: { type: string }
+        review_permissions:
+          type: object
+          required: [review, acceptFacts, confirmOutbox]
+          properties:
+            review: { type: boolean }
+            acceptFacts: { type: boolean }
+            confirmOutbox: { type: boolean }
     EpisodeInput:
       type: object
       required: [orgId]
       properties:
         orgId: { type: string }
+        intent: { type: string, enum: [ask, draft] }
     CoreStep:
       type: object
       required: [step_id, seq, kind, tool_name, output_ref, run_id]
@@ -166,7 +190,11 @@ components:
         status: { type: string }
         skill: { type: string }
         cost: { type: string }
-        critic_verdict: { type: ["string", "null"] }
+        critic_verdict:
+          anyOf:
+            - $ref: "#/components/schemas/CriticVerdict"
+            - type: "null"
+        intent: { type: string }
         started_at: { type: string }
         plan_json: { type: object, additionalProperties: true }
         steps:
@@ -183,6 +211,29 @@ components:
         version: { type: integer }
         payload_json: { type: object, additionalProperties: true }
         reviewer_id: { type: ["string", "null"] }
+        linked_episode_ids:
+          type: array
+          items: { type: string }
+    CriticCheck:
+      type: object
+      required: [status, note]
+      properties:
+        status: { type: string, enum: [pass, fail] }
+        note: { type: string }
+    CriticVerdict:
+      type: object
+      required: [overall, checks]
+      properties:
+        overall: { type: string, enum: [pass, pass_with_notes, block] }
+        checks:
+          type: object
+          required: [citations_resolve, citation_supports_text, forbidden_content, injected_instruction, confidence_language]
+          properties:
+            citations_resolve: { $ref: "#/components/schemas/CriticCheck" }
+            citation_supports_text: { $ref: "#/components/schemas/CriticCheck" }
+            forbidden_content: { $ref: "#/components/schemas/CriticCheck" }
+            injected_instruction: { $ref: "#/components/schemas/CriticCheck" }
+            confidence_language: { $ref: "#/components/schemas/CriticCheck" }
     ProposalReviewInput:
       type: object
       required: [action, version]
@@ -205,9 +256,25 @@ components:
       properties:
         valid: { type: boolean }
         count: { type: integer }
+        checked: { type: integer }
+        incremental: { type: boolean }
+        verified_at: { type: string }
         failures:
           type: array
           items: { type: string }
+    CoreReplay:
+      type: object
+      required: [episodeId, mode, verified]
+      additionalProperties: true
+      properties:
+        episodeId: { type: string }
+        mode: { type: string }
+        verified: { type: boolean }
+    ReplayInput:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [snapshot, reexecute] }
     HealthStatus:
       type: object
       properties:

@@ -7,6 +7,7 @@
  */
 import type { CoreEpisodePlanJson } from './coreEpisodePlanJson';
 import type { CoreStep } from './coreStep';
+import type { CriticVerdict } from './criticVerdict';
 
 export interface CoreEpisode {
   episode_id: string;
@@ -14,8 +15,8 @@ export interface CoreEpisode {
   status: string;
   skill: string;
   cost: string;
-  /** @nullable */
-  critic_verdict: string | null;
+  critic_verdict: CriticVerdict | null;
+  intent?: string;
   started_at: string;
   plan_json: CoreEpisodePlanJson;
   steps: CoreStep[];

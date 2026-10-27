@@ -32,8 +32,10 @@ Agent Edition specification. These implementation notes do not amend them.
   exists in Phase 0; `applied` is blocked by a database constraint.
 - Retention/deletion procedures, production SSO, real transcription, MCP and skill
   logic belong to later prompts. Do not add them while completing this phase.
-- Budget amounts are illustrative internal units, not prices. Mock processing
-  cost is zero. All displayed data is synthetic.
+- Budget amounts are illustrative internal units, not prices. Mock token usage
+  and processing cost are synthetic and non-zero so that budget enforcement
+  follows the real guarded path. No provider is billed. All displayed data is
+  synthetic.
 - SQL completion checks explicitly reject NULL verdicts; a nullable equality
   alone is not sufficient because PostgreSQL CHECK treats NULL as passing.
 - In Replit/Nix, browser tests use the system Chromium wrapper. CI uses the

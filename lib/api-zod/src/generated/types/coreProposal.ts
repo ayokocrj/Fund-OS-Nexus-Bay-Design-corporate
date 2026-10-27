@@ -16,4 +16,5 @@ export interface CoreProposal {
   payload_json: CoreProposalPayloadJson;
   /** @nullable */
   reviewer_id: string | null;
+  linked_episode_ids?: string[];
 }

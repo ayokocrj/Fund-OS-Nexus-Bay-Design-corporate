@@ -5,7 +5,8 @@ import { invariantGuard } from "@/domain/guard";
 import { readObservation } from "@/domain/records";
 import { runEpisode } from "@/agent/loop";
 import { reviewProposal } from "@/domain/outbox";
-import { verifyChain } from "@/domain/ledger";
+import { verifyChain, replay } from "@/domain/ledger";
+import { validateConfig } from "@/domain/config";
 import { actorFromCookie, demoIdentity, sessionCookie, signDemoSession } from "@/platform/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +31,13 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       const identity = await demoIdentity(userId);
       const users = await db.user.findMany({ where: { user_id: { startsWith: "demo-" } }, orderBy: { user_id: "asc" } });
       const identities = await Promise.all(users.map(user => demoIdentity(user.user_id)));
-      const response = NextResponse.json({ mode: "demo", identity, identities });
+      const firm = await db.firm.findUniqueOrThrow({ where: { firm_id: identity.firmId } });
+      const settings = validateConfig(firm.mode, firm.settings);
+      const response = NextResponse.json({ mode: "demo", identity, identities, review_permissions: {
+        review: !["builder", "auditor"].includes(identity.role),
+        acceptFacts: ["partner", "analyst"].includes(identity.role),
+        confirmOutbox: settings.permissions.outboxConfirmRoles.includes(identity.role as "partner" | "analyst" | "ops"),
+      } });
       response.cookies.set({ ...sessionCookie, value: signDemoSession(identity.userId), secure: request.headers.get("x-forwarded-proto") === "https" });
       return response;
     }
@@ -42,10 +49,17 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         return NextResponse.json(result);
       }
       if (route === "episodes" && post) {
-        const input = z.object({ orgId: z.string().min(1).max(100) }).strict().parse(await request.json());
-        return NextResponse.json(await runEpisode(actor, input.orgId), { status: 201 });
+        const input = z.object({ orgId: z.string().min(1).max(100), intent: z.enum(["ask", "draft"]).optional() }).strict().parse(await request.json());
+        return NextResponse.json(await runEpisode(actor, input.orgId, { intent: input.intent }), { status: 201 });
       }
-      if (route === "proposals" && !post) return NextResponse.json(await db.proposal.findMany({ where: { firm_id: actor.firmId }, orderBy: { proposal_id: "desc" } }));
+      if (parts[0] === "episodes" && parts[2] === "replay" && post) {
+        const { mode } = z.object({ mode: z.enum(["snapshot", "reexecute"]) }).strict().parse(await request.json());
+        return NextResponse.json(await replay(actor, parts[1], mode));
+      }
+      if (route === "proposals" && !post) {
+        const proposals = await db.proposal.findMany({ where: { firm_id: actor.firmId }, include: { episodeLinks: true }, orderBy: { proposal_id: "desc" } });
+        return NextResponse.json(proposals.map(({ episodeLinks, ...proposal }) => ({ ...proposal, linked_episode_ids: episodeLinks.map(link => link.episode_id) })));
+      }
       if (parts[0] === "proposals" && parts[2] === "review" && post) {
         const input = reviewSchema.parse(await request.json());
         return NextResponse.json(await reviewProposal(actor, parts[1], input.action, input.version, input.text));
@@ -57,7 +71,8 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         const global = await verifyChain();
         const ownCount = await db.run.count({ where: { firm_id: actor.firmId } });
         // Global chain integrity, but no other tenant's IDs/count are disclosed.
-        return NextResponse.json({ valid: global.valid, count: ownCount, failures: global.valid ? [] : ["CHAIN_INTEGRITY_FAILURE"] });
+        const checked = await db.run.count({ where: { firm_id: actor.firmId, seq: { gt: global.fromSeq } } });
+        return NextResponse.json({ valid: global.valid, count: ownCount, checked, incremental: global.incremental, verified_at: global.verified_at, failures: global.valid ? [] : ["CHAIN_INTEGRITY_FAILURE"] });
       }
       return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
     });

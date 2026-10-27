@@ -1,35 +1,69 @@
 import { test, expect } from "@playwright/test";
-test("Episode trace is persisted and shows critic, zero cost and all seven steps", async ({ page }) => {
+test("Ask trace: six steps, five critic checks, positive cost, no object serialization artifact and both replay modes", async ({ page }) => {
   await page.goto("/builder/episodes");
   await expect(page.getByText("SYNTHETIC DATA ONLY", { exact: false }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: /episode trace/i }).first()).toBeVisible();
-  await expect(page.getByText(/Meridian Ridge/).first()).toBeVisible();
-  await expect(page.getByText(/passed/).first()).toBeVisible();
-  const episode = page.locator('[data-testid^="row-episode-"]').filter({ hasText: "Meridian Ridge" }).first();
-  await expect(episode).toContainText("cost 0");
-  await episode.locator('[data-testid^="button-toggle-"]').click();
-  await expect(episode.locator('[data-testid^="row-step-"]')).toHaveCount(7);
+  const response = page.waitForResponse(response => response.url().endsWith("/api/core/episodes") && response.request().method() === "POST");
+  await page.getByTestId("button-run-episode").click();
+  const result = await (await response).json();
+  expect(Number(result.cost)).toBeGreaterThan(0);
+  expect(result.proposalLinks).toHaveLength(0);
+  const episode = page.getByTestId(`row-episode-${result.episode_id}`);
+  // Successful Ask opens its trace automatically: clicking again would close it.
+  await expect(episode.locator('[data-testid^="row-step-"]')).toHaveCount(6);
+  await expect(episode.getByTestId("critic-checks").locator("b")).toHaveCount(5);
+  await expect(episode).not.toContainText("[object Object]");
+  await episode.getByRole("button", { name: "Check snapshot integrity" }).click();
+  await expect(episode.getByTestId("replay-result")).toContainText('"verified": true');
+  await expect(episode.getByTestId("replay-result")).toContainText('"mode": "snapshot"');
+  await episode.getByRole("button", { name: "Re-execute with mock gateway" }).click();
+  await expect(episode.getByTestId("replay-result")).toContainText('"mode": "reexecute"');
+  await expect(episode.getByTestId("replay-result")).toContainText('"gatewayCalls": 1');
+  await expect(episode.getByTestId("replay-result")).toContainText('"verified": true');
 });
-test("Review inbox and outbox use server records after navigation and reload", async ({ page }) => {
+test("Ledger verification is on demand, never polled by the browser", async ({ page }) => {
+  let verifications = 0;
+  page.on("request", request => { if (request.url().includes("/api/core/ledger")) verifications++; });
+  await page.goto("/builder/episodes");
+  await expect(page.getByTestId("button-run-episode")).toBeEnabled();
+  expect(verifications).toBe(0);
+  await page.getByTestId("button-verify-ledger").click();
+  await expect(page.getByTestId("status-ledger")).toContainText("verified");
+  expect(verifications).toBe(1);
+  await page.clock.install();
+  await page.clock.fastForward(31000);
+  expect(verifications).toBe(1);
+});
+test("Review and Outbox: builder read-only, terminal proposals disabled after role change and reload", async ({ page }) => {
   await page.goto("/analyst/review");
   await expect(page.getByRole("heading", { name: /review/i }).first()).toBeVisible();
-  await expect(page.getByText(/September 2025/).first()).toBeVisible();
+  await expect(page.locator('[data-testid^="card-proposal-"]').first()).toBeVisible();
+  for (const button of await page.locator('[data-testid^="button-accept-"],[data-testid^="button-edit-"],[data-testid^="button-reject-"]').all()) await expect(button).toBeDisabled();
+  await page.getByTestId("select-identity").selectOption("demo-bay-analyst");
+  const terminal = page.locator('article[data-state="edited"]').first();
+  await expect(terminal).toBeVisible();
+  await expect(terminal.locator("button").filter({ hasText: /^(Accept|Edit text|Reject)$/ })).toHaveCount(3);
+  for (const button of await terminal.getByRole("button", { name: /^(Accept|Edit text|Reject)$/ }).all()) await expect(button).toBeDisabled();
   await page.reload();
-  await expect(page.getByText(/September 2025/).first()).toBeVisible();
+  for (const button of await page.locator('article[data-state="edited"]').first().getByRole("button", { name: /^(Accept|Edit text|Reject)$/ }).all()) await expect(button).toBeDisabled();
+  await page.getByTestId("select-identity").selectOption("demo-bay-builder");
   await page.goto("/analyst/outbox");
   await expect(page.getByRole("heading", { name: /outbox/i }).first()).toBeVisible();
+  await expect(page.locator('[data-testid^="card-proposal-"]').first()).toBeVisible();
+  expect(await page.locator('[data-testid^="button-confirm-"]').count()).toBeGreaterThan(0);
+  for (const button of await page.locator('[data-testid^="button-confirm-"]').all()) await expect(button).toBeDisabled();
   await expect(page.getByRole("button", { name: /send|apply/i })).toHaveCount(0);
 });
-test("API uses signed demo session, enforces tenant scope and auditor write refusal", async ({ request }) => {
+test("API: signed session, tenant scope, builder review refusal, auditor write refusal and no role-header bypass", async ({ request }) => {
   const session = await request.get("/api/core/session");
   expect(session.status()).toBe(200);
   const origin = new URL(session.url()).origin;
-  const denied = await request.get("/api/core/sources/north-obs-1");
-  expect(denied.status()).toBe(404);
-  const switched = await request.post("/api/core/session", { headers: { origin }, data: { userId: "demo-bay-auditor" } });
-  expect(switched.status()).toBe(200);
-  const mutation = await request.post("/api/core/episodes", { headers: { origin }, data: { orgId: "bay-org-001" } });
-  expect(mutation.status()).toBe(403);
-  const forged = await request.post("/api/core/episodes", { headers: { origin, "x-user-role": "partner" }, data: { orgId: "bay-org-001" } });
-  expect(forged.status()).toBe(403);
+  expect((await request.get("/api/core/sources/north-obs-1")).status()).toBe(404);
+  const proposals = await (await request.get("/api/core/proposals")).json();
+  const pending = proposals.find((proposal: { state: string }) => proposal.state === "proposed");
+  expect(pending).toBeTruthy();
+  expect((await request.post(`/api/core/proposals/${pending.proposal_id}/review`, { headers: { origin }, data: { action: "rejected", version: pending.version } })).status()).toBe(403);
+  expect((await request.post("/api/core/session", { headers: { origin }, data: { userId: "demo-bay-auditor" } })).status()).toBe(200);
+  expect((await request.post("/api/core/episodes", { headers: { origin }, data: { orgId: "bay-org-001" } })).status()).toBe(403);
+  expect((await request.post("/api/core/episodes", { headers: { origin, "x-user-role": "partner" }, data: { orgId: "bay-org-001" } })).status()).toBe(403);
 });

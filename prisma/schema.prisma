@@ -47,6 +47,7 @@ enum ProposalState {
   confirmed
   applied
   failed
+  stopped
 }
 enum ProposalType {
   entity
@@ -173,11 +174,14 @@ model Episode {
   plan_json Json
   status EpisodeStatus @default(planned)
   cost Decimal @default(0) @db.Decimal(18, 8)
-  critic_verdict String?
+  critic_verdict Json?
+  intent String @default("ask")
+  context_json Json?
   started_at DateTime @default(now())
   ended_at DateTime?
   steps Step[]
   proposals Proposal[]
+  proposalLinks EpisodeProposal[]
   @@index([firm_id, started_at])
 }
 model Step {
@@ -206,8 +210,18 @@ model Proposal {
   reviewed_at DateTime?
   edit_diff Json?
   version Int @default(0)
+  identity_key String?
+  episodeLinks EpisodeProposal[]
   episode Episode @relation(fields: [episode_id], references: [episode_id], onDelete: Restrict)
   @@index([firm_id, state])
+}
+model EpisodeProposal {
+  episode_id String
+  proposal_id String
+  linked_at DateTime @default(now())
+  episode Episode @relation(fields: [episode_id], references: [episode_id], onDelete: Restrict)
+  proposal Proposal @relation(fields: [proposal_id], references: [proposal_id], onDelete: Restrict)
+  @@id([episode_id, proposal_id])
 }
 model OrganisationFact {
   fact_id String @id @default(cuid())
@@ -395,6 +409,16 @@ model Run {
   prev_hash String
   hash String @unique
   seq Int @unique @default(autoincrement())
+  episode_id String?
+  input_ref Json?
+  hash_version Int @default(1)
+}
+model LedgerCheckpoint {
+  key String @id
+  last_seq Int
+  last_hash String
+  verified_at DateTime
+  valid Boolean
 }
 model Invariant {
   invariant_id String @id

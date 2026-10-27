@@ -45,3 +45,20 @@ await execute the query after the authorization context has been left.
 
 **How to apply:** Await queries inside the context boundary and retain a test
 that passes an ORM query directly to that boundary.
+
+## Read versus draft and review evidence
+
+Ask/read work must create no business proposals and end at present. Semantic
+duplicates in proposed/accepted/edited/confirmed states must be reused and linked
+to the new episode, not duplicated. Builder and auditor are read-only in Review
+and Outbox. Synthetic mocks must consume a non-zero budget; a budget stop must
+retain the partial draft as stopped and ask for human review.
+
+**Why:** The user explicitly rejected the initial read-to-proposal behavior,
+zero-cost mocks and a replay that merely rehashed stored outputs.
+
+**How to apply:** Keep snapshot integrity and gateway-backed re-execution
+distinct. Persist and expose all five named critic checks. Ledger verification
+must be on-demand in the browser and incremental/nightly on the server. Display
+the complete schema and full test output, not merely file paths or download
+cards, before stopping at Phase 0.

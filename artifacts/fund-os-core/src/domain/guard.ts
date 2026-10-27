@@ -20,6 +20,7 @@ export async function identity(actor: Actor, tx?: Tx) {
 export async function invariantGuard(actor: Actor, purpose: "read" | "draft" | "propose" | "review" | "policy", tx?: Tx) {
   const context = await identity(actor, tx);
   if (purpose !== "read" && context.user?.role === "auditor") throw new InvariantError("AUDITOR_READ_ONLY");
+  if (purpose === "review" && context.user?.role === "builder") throw new InvariantError("BUILDER_REVIEW_READ_ONLY");
   if (actor.serviceIdentity && !["read", "propose"].includes(purpose)) throw new InvariantError("SERVICE_READ_PROPOSE_ONLY");
   if (purpose === "policy" && context.user?.role !== "partner") throw new InvariantError("PARTNER_REQUIRED");
   return context;

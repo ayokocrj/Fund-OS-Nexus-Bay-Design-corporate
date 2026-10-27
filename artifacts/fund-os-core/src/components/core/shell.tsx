@@ -24,7 +24,7 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-[100dvh]">
       <div data-testid="banner-synthetic" className="mono px-4 py-1.5 text-center text-[11px]" style={{ background: "hsl(var(--navy))", color: "hsl(var(--panel) / .85)" }}>
-        PHASE 0 · SYNTHETIC DATA ONLY · All five gateway modalities are deterministic mocks — no live model, data or adapter calls
+        PHASE 0 · SYNTHETIC DATA ONLY · All five gateway modalities are deterministic mocks: no live model, data or adapter calls
       </div>
       <header className="border-b" style={{ borderColor: "hsl(var(--line))", background: "hsl(var(--panel))" }}>
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-3 px-4 py-3">
@@ -51,7 +51,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 <select data-testid="select-identity" className="input" value={s.identity.userId} disabled={select.isPending}
                   onChange={(e) => select.mutate({ data: { userId: e.target.value } })}>
                   {s.identities.map((i) => (
-                    <option key={i.userId} value={i.userId}>{i.name} — {i.role} · {i.firmName}</option>
+                    <option key={i.userId} value={i.userId}>{i.name}: {i.role} · {i.firmName}</option>
                   ))}
                 </select>
               </>

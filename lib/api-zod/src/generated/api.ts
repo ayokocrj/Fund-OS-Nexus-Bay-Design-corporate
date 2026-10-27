@@ -23,7 +23,12 @@ export const CoreSessionResponse = zod.object({
   "firmId": zod.string(),
   "firmName": zod.string()
 })),
-  "mode": zod.string()
+  "mode": zod.string(),
+  "review_permissions": zod.object({
+  "review": zod.boolean(),
+  "acceptFacts": zod.boolean(),
+  "confirmOutbox": zod.boolean()
+}).optional()
 })
 
 
@@ -46,7 +51,12 @@ export const SelectDemoIdentityResponse = zod.object({
   "firmId": zod.string(),
   "firmName": zod.string()
 })),
-  "mode": zod.string()
+  "mode": zod.string(),
+  "review_permissions": zod.object({
+  "review": zod.boolean(),
+  "acceptFacts": zod.boolean(),
+  "confirmOutbox": zod.boolean()
+}).optional()
 })
 
 
@@ -56,7 +66,32 @@ export const ListCoreEpisodesResponseItem = zod.object({
   "status": zod.string(),
   "skill": zod.string(),
   "cost": zod.string(),
-  "critic_verdict": zod.string().nullable(),
+  "critic_verdict": zod.union([zod.object({
+  "overall": zod.enum(['pass', 'pass_with_notes', 'block']),
+  "checks": zod.object({
+  "citations_resolve": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "citation_supports_text": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "forbidden_content": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "injected_instruction": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "confidence_language": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+})
+})
+}),zod.null()]),
+  "intent": zod.string().optional(),
   "started_at": zod.string(),
   "plan_json": zod.record(zod.string(), zod.unknown()),
   "steps": zod.array(zod.object({
@@ -72,7 +107,8 @@ export const ListCoreEpisodesResponse = zod.array(ListCoreEpisodesResponseItem)
 
 
 export const RunCoreEpisodeBody = zod.object({
-  "orgId": zod.string()
+  "orgId": zod.string(),
+  "intent": zod.enum(['ask', 'draft']).optional()
 })
 
 export const RunCoreEpisodeResponse = zod.object({
@@ -81,7 +117,32 @@ export const RunCoreEpisodeResponse = zod.object({
   "status": zod.string(),
   "skill": zod.string(),
   "cost": zod.string(),
-  "critic_verdict": zod.string().nullable(),
+  "critic_verdict": zod.union([zod.object({
+  "overall": zod.enum(['pass', 'pass_with_notes', 'block']),
+  "checks": zod.object({
+  "citations_resolve": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "citation_supports_text": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "forbidden_content": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "injected_instruction": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+}),
+  "confidence_language": zod.object({
+  "status": zod.enum(['pass', 'fail']),
+  "note": zod.string()
+})
+})
+}),zod.null()]),
+  "intent": zod.string().optional(),
   "started_at": zod.string(),
   "plan_json": zod.record(zod.string(), zod.unknown()),
   "steps": zod.array(zod.object({
@@ -95,6 +156,21 @@ export const RunCoreEpisodeResponse = zod.object({
 })
 
 
+export const ReplayCoreEpisodeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ReplayCoreEpisodeBody = zod.object({
+  "mode": zod.enum(['snapshot', 'reexecute'])
+})
+
+export const ReplayCoreEpisodeResponse = zod.object({
+  "episodeId": zod.string(),
+  "mode": zod.string(),
+  "verified": zod.boolean()
+})
+
+
 export const ListCoreProposalsResponseItem = zod.object({
   "proposal_id": zod.string(),
   "episode_id": zod.string(),
@@ -102,7 +178,8 @@ export const ListCoreProposalsResponseItem = zod.object({
   "state": zod.string(),
   "version": zod.number().int(),
   "payload_json": zod.record(zod.string(), zod.unknown()),
-  "reviewer_id": zod.string().nullable()
+  "reviewer_id": zod.string().nullable(),
+  "linked_episode_ids": zod.array(zod.string()).optional()
 })
 export const ListCoreProposalsResponse = zod.array(ListCoreProposalsResponseItem)
 
@@ -130,7 +207,8 @@ export const ReviewCoreProposalResponse = zod.object({
   "state": zod.string(),
   "version": zod.number().int(),
   "payload_json": zod.record(zod.string(), zod.unknown()),
-  "reviewer_id": zod.string().nullable()
+  "reviewer_id": zod.string().nullable(),
+  "linked_episode_ids": zod.array(zod.string()).optional()
 })
 
 
@@ -150,6 +228,9 @@ export const GetCoreSourceResponse = zod.object({
 export const VerifyCoreLedgerResponse = zod.object({
   "valid": zod.boolean(),
   "count": zod.number().int(),
+  "checked": zod.number().int().optional(),
+  "incremental": zod.boolean().optional(),
+  "verified_at": zod.string().optional(),
   "failures": zod.array(zod.string())
 })
 

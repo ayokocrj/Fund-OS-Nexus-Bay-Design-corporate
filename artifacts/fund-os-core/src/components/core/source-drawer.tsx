@@ -23,7 +23,7 @@ export function SourceDrawer({ obsId, onClose }: { obsId: string | null; onClose
           <div className="space-y-4 text-sm">
             <dl className="grid grid-cols-[110px_1fr] gap-y-1.5">
               <dt className="label">Observation</dt><dd className="mono" data-testid="text-source-obs">{s.obs_id}</dd>
-              <dt className="label">Document</dt><dd className="mono">{s.doc_id ?? "—"}</dd>
+              <dt className="label">Document</dt><dd className="mono">{s.doc_id ?? "none"}</dd>
               <dt className="label">Modality</dt><dd className="mono">{s.modality} <span className="tag ml-1">deterministic mock</span></dd>
             </dl>
             <div>

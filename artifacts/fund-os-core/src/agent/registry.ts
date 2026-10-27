@@ -32,8 +32,8 @@ export const registry: ReadonlyMap<string, Tool> = new Map([
     inputSchema: z.toJSONSchema(input), outputSchema: z.toJSONSchema(output),
     execute: (actor, value) => answerFromRecord(actor, input.parse(value).orgId),
   })],
-  ["propose_record_note", validateTool({
-    name: "propose_record_note", version: "1", sideEffectClass: "propose",
+  ["draft_record_note", validateTool({
+    name: "draft_record_note", version: "2", sideEffectClass: "draft",
     allowedRoles: allRoles.filter(role => role !== "auditor"), costClass: "zero", skill: "core",
     input: proposalInput, output: proposalOutput,
     inputSchema: z.toJSONSchema(proposalInput), outputSchema: z.toJSONSchema(proposalOutput),

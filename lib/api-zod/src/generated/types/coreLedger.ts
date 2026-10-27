@@ -9,5 +9,8 @@
 export interface CoreLedger {
   valid: boolean;
   count: number;
+  checked?: number;
+  incremental?: boolean;
+  verified_at?: string;
   failures: string[];
 }

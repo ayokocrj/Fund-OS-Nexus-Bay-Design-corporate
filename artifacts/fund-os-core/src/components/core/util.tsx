@@ -58,8 +58,8 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 
 const TONES: Record<string, string> = {
   ok: "var(--ok)", pass: "var(--ok)", passed: "var(--ok)", approved: "var(--ok)", accepted: "var(--ok)", completed: "var(--ok)", succeeded: "var(--ok)", confirmed: "var(--ok)", edited: "var(--accent)",
-  rejected: "var(--bad)", failed: "var(--bad)", fail: "var(--bad)", error: "var(--bad)",
-  pending: "var(--warn)", proposed: "var(--warn)", running: "var(--warn)", draft: "var(--warn)",
+  rejected: "var(--bad)", failed: "var(--bad)", fail: "var(--bad)", error: "var(--bad)", block: "var(--bad)",
+  pending: "var(--warn)", proposed: "var(--warn)", running: "var(--warn)", draft: "var(--warn)", stopped: "var(--warn)", pass_with_notes: "var(--warn)",
 };
 export function StatusPill({ value, testId }: { value: string | null | undefined; testId?: string }) {
   const v = value ?? "none";

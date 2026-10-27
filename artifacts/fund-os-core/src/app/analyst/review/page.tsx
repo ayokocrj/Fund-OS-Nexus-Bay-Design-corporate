@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
-import { useListCoreProposals, getListCoreProposalsQueryKey } from "@workspace/api-client-react";
+import { useListCoreProposals, useListCoreEpisodes, getListCoreProposalsQueryKey } from "@workspace/api-client-react";
 import { ErrorBox, Skeleton, Empty, PageHeader, POLL_MS } from "@/components/core/util";
 import { ProposalCard } from "@/components/core/proposal-card";
 import { SourceDrawer } from "@/components/core/source-drawer";
 
 export default function Page() {
+  const episodes = useListCoreEpisodes();
   const q = useListCoreProposals({ query: { refetchInterval: POLL_MS, queryKey: getListCoreProposalsQueryKey() } });
   const [src, setSrc] = useState<string | null>(null);
   const items = q.data ?? [];
@@ -14,12 +15,17 @@ export default function Page() {
     <div>
       <PageHeader eyebrow="Analyst · Phase 0" title="Proposal review">
         <p className="max-w-md text-xs" style={{ color: "hsl(var(--muted))" }}>
-          All persisted proposals, grouped by type. Accept, edit or reject — each action is version-checked by the server against the current record.
+          All persisted proposals, grouped by type. Accept, edit or reject: each action is version-checked by the server against the current record.
         </p>
       </PageHeader>
+      {episodes.data?.filter(episode => episode.plan_json.sourceFlagged).map(episode => <article key={episode.episode_id} className="panel mb-3 p-4" data-testid="source-review-flag">
+        <b>Human source review required</b><p className="mono text-xs">{episode.episode_id}</p>
+        <p className="text-sm">Untrusted instructions detected: this Ask created no business proposal.</p>
+        {Array.isArray(episode.plan_json.flaggedObservations) && episode.plan_json.flaggedObservations.map(id => <button key={String(id)} className="tag underline" onClick={() => setSrc(String(id))}>{String(id)}</button>)}
+      </article>)}
       {q.isLoading && <Skeleton rows={3} />}
       {q.isError && <ErrorBox error={q.error} onRetry={() => q.refetch()} />}
-      {q.data && items.length === 0 && <Empty title="No proposals to review">Proposals appear after a builder runs an episode.</Empty>}
+      {q.data && items.length === 0 && <Empty title="No proposals to review">Only explicit draft or extraction requests create business proposals.</Empty>}
       <div className="space-y-8">
         {Object.entries(groups).map(([type, list]) => (
           <section key={type} data-testid={`group-${type}`}>

@@ -23,12 +23,14 @@ import type {
   CoreEpisode,
   CoreLedger,
   CoreProposal,
+  CoreReplay,
   CoreSession,
   CoreSource,
   DemoIdentityInput,
   EpisodeInput,
   HealthStatus,
-  ProposalReviewInput
+  ProposalReviewInput,
+  ReplayInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -362,6 +364,89 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getRunCoreEpisodeMutationOptions(options));
+    }
+
+export const getReplayCoreEpisodeUrl = (id: string,) => {
+
+
+
+
+  return `/api/core/episodes/${id}/replay`
+}
+
+export const replayCoreEpisode = async (id: string,
+    replayInput: ReplayInput, options?: Parameters<typeof customFetch>[1]): Promise<CoreReplay> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CoreReplay>(getReplayCoreEpisodeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(replayInput)
+  }
+);}
+
+
+
+
+
+export const getReplayCoreEpisodeMutationKey = () => ['replayCoreEpisode'] as const;
+
+export const getReplayCoreEpisodeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replayCoreEpisode>>, TError,ReplayCoreEpisodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof replayCoreEpisode>>, TError,ReplayCoreEpisodeMutationVariables, TContext> => {
+
+const mutationKey = getReplayCoreEpisodeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof replayCoreEpisode>>, ReplayCoreEpisodeMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  replayCoreEpisode(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReplayCoreEpisodeMutationResult = NonNullable<Awaited<ReturnType<typeof replayCoreEpisode>>>
+    export type ReplayCoreEpisodeMutationBody = BodyType<ReplayInput>
+    export type ReplayCoreEpisodeMutationError = ErrorType<unknown>
+    export type ReplayCoreEpisodeMutationVariables = {id: string;data: BodyType<ReplayInput>}
+
+    export const useReplayCoreEpisode = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replayCoreEpisode>>, TError,ReplayCoreEpisodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof replayCoreEpisode>>,
+        TError,
+        ReplayCoreEpisodeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReplayCoreEpisodeMutationOptions(options));
     }
 
 export const getListCoreProposalsUrl = () => {

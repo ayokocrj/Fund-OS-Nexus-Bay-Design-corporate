@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CoreIdentity } from './coreIdentity';
+import type { CoreSessionReviewPermissions } from './coreSessionReviewPermissions';
 
 export interface CoreSession {
   identity: CoreIdentity;
   identities: CoreIdentity[];
   mode: string;
+  review_permissions?: CoreSessionReviewPermissions;
 }
