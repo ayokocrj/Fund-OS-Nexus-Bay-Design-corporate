@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/fof-os/"
+title = "Nexus Bay · FoF OS"
+description = "An AI-agent-centred operating interface for Nexus Bay Capital's fund-of-funds team: a workflow rail, an assistant stream with traceable steps and sources, and role-based views for Monday briefs, signal capture, manager pipeline, diligence, monitoring, LP letters and questions, fund ops, startup pipeline, autonomy settings and Friday read-outs. Demonstration data only."
+version = "1.0.0"
+id = "artifacts/fof-os"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/fof-os/" ]
+localPort = 22554
+
+[services.development]
+run = "pnpm --filter @workspace/fof-os run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/fof-os", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/fof-os/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22554"
+BASE_PATH = "/fof-os/"
