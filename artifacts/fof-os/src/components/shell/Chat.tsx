@@ -8,6 +8,7 @@ import { SUGGESTIONS } from '@/data/screens';
 import { LEVELS } from '@/data/trust';
 import { SAMPLE_EMAIL, SAMPLE_MEMO, type Conversation } from '@/data/signals';
 import { SourceChip } from '@/components/kit';
+import { parseXlsxInBrowser } from '@/lib/xlsx-browser';
 import mark from '@/assets/brand/favicon.png';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -605,6 +606,56 @@ export function Chat({ current, wsOpen, onToggleScreens }: { current: number | n
       }
     } catch {
       // fallback below
+    }
+
+    // Static web deployment fallback: fetch .xlsx from public/growth-models/ and parse directly in the browser
+    try {
+      const base = import.meta.env.BASE_URL || '/';
+      const staticRes = await fetch(`${base}growth-models/${encodeURIComponent(model.filename)}`);
+      if (staticRes.ok) {
+        const buf = await staticRes.arrayBuffer();
+        const parsed = await parseXlsxInBrowser(buf, model.filename);
+        setActiveExcelModel({
+          title: model.title,
+          filename: model.filename,
+          markdown: parsed.markdown,
+        });
+        let detailedText = `Modèle Excel **${model.filename}** chargé et analysé.\n\n${parsed.markdown.slice(0, 1200)}`;
+        if (apiKey.trim()) {
+          const directAnalysis = await callGeminiDirectFromBrowser({
+            apiKey: apiKey.trim(),
+            systemInstruction:
+              `Tu es un Partner Growth Equity & Fund-of-Funds utilisant les modèles financiers Excel de Mike Hinckley (Growth Equity Guide). ` +
+              `Adapte ton analyse pour une démo destinée à la cible de prospection "${prospectTarget}" sur le deal "${dealName}". Sois précis, cite les chiffres exacts des onglets Excel et structure les points de due diligence.`,
+            prompt: `Voici les données extraites du fichier Excel "${model.filename}" :\n\n${parsed.markdown}\n\nDemande : ${userPrompt}`,
+          });
+          if (directAnalysis) detailedText = directAnalysis;
+        }
+        setThinkingText(null);
+        pushMessage({
+          id: uid(),
+          role: 'scribe',
+          streaming: true,
+          text: detailedText,
+          steps: [
+            `Parsed "${model.filename}" tabs & formulas in browser`,
+            `Tailored diligence case for target: ${prospectTarget} (${dealName})`,
+            'Loaded full Excel model into active memory for follow-up voice/text Q&A',
+          ],
+          sources: parsed.facts.map((f) => ({
+            label: f.field,
+            doc: model.filename,
+            loc: f.page_or_time,
+            snip: f.quote,
+            conf: f.confidence,
+          })),
+          screen: 1,
+          screenLabel: 'Signal capture',
+        });
+        return;
+      }
+    } catch {
+      // ignore static fallback error
     } finally {
       setThinkingText(null);
     }
@@ -735,14 +786,25 @@ export function Chat({ current, wsOpen, onToggleScreens }: { current: number | n
         if (apiKey.trim()) {
           try {
             let inlineMedia: { mimeType: string; dataBase64: string } | undefined;
-            if (raws.length > 0 && (raws[0].type.startsWith('image/') || raws[0].type === 'application/pdf' || raws[0].type.startsWith('audio/'))) {
+            let currentExcelMarkdown = activeExcelModel?.markdown ?? '';
+            let currentExcelName = activeExcelModel?.filename ?? '';
+            if (raws.length > 0 && /\.xlsx?$/i.test(raws[0].name)) {
+              const parsed = await parseXlsxInBrowser(await raws[0].arrayBuffer(), raws[0].name);
+              currentExcelMarkdown = parsed.markdown;
+              currentExcelName = raws[0].name;
+              setActiveExcelModel({
+                title: raws[0].name,
+                filename: raws[0].name,
+                markdown: parsed.markdown,
+              });
+            } else if (raws.length > 0 && (raws[0].type.startsWith('image/') || raws[0].type === 'application/pdf' || raws[0].type.startsWith('audio/'))) {
               inlineMedia = {
                 mimeType: raws[0].type,
                 dataBase64: await blobToBase64(raws[0]),
               };
             }
-            const excelCtx = activeExcelModel
-              ? `\n\nModèle Excel actif (${activeExcelModel.filename}) :\n${activeExcelModel.markdown.slice(0, 14000)}`
+            const excelCtx = currentExcelMarkdown
+              ? `\n\nModèle Excel actif (${currentExcelName}) :\n${currentExcelMarkdown.slice(0, 14000)}`
               : '';
             const directAnswer = await callGeminiDirectFromBrowser({
               apiKey: apiKey.trim(),
@@ -751,7 +813,7 @@ export function Chat({ current, wsOpen, onToggleScreens }: { current: number | n
                 `Cible de prospection : "${prospectTarget}". Deal analysé : "${dealName}". ` +
                 `Tu maîtrises les 14 modèles Excel du Growth Equity Guide de Mike Hinckley (ARR Waterfall, Cohortes NRR/GRR, Billings vs GAAP Revenue, R&D Capitalization, Option Pool Pre/Post-Money, Paper LBO, QoE) ainsi que le portefeuille Nexus Bay. ` +
                 `Réponds dans la langue de l'utilisateur (français ou anglais). Ne refuse jamais d'analyser ou de calculer.${excelCtx}`,
-              prompt: body || `Analyse le fichier joint (${atts.map((a) => a.name).join(', ')}) pour notre démo destinée à ${prospectTarget}.`,
+              prompt: body || `Analyse le fichier joint (${atts.map((a) => a.name).join(', ')}) en détail pour notre démo destinée à ${prospectTarget}.`,
               inlineMedia,
             });
             if (directAnswer) {

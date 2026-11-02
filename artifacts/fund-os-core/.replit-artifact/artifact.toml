@@ -8,7 +8,7 @@ router = "path"
 
 [[services]]
 name = "web"
-paths = ["/", "/api/core", "/read", "/ask", "/api/read", "/api/ask"]
+paths = ["/", "/api/core", "/read", "/ask", "/growth-models", "/api-key", "/api/read", "/api/ask"]
 localPort = 24294
 
 [services.development]
